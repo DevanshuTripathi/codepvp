@@ -80,7 +80,9 @@ const ArenaLobby: React.FC = () => {
             exit={{ opacity: 0, scale: 0.8 }}
             className="z-10 flex flex-col items-center justify-center absolute inset-0"
           >
-            <GlitchTitle text="Arena Loading..." className="text-5xl md:text-7xl mb-8" />
+            <div className="text-5xl md:text-7xl mb-8">
+              <GlitchTitle text="Arena Loading..." />
+            </div>
             <motion.div
               className="w-16 h-16 rounded-full border-4 border-cyan-400 border-t-pink-500 animate-spin"
               style={{ boxShadow: "0 0 32px #0ff, 0 0 64px #f0f" }}
@@ -97,7 +99,7 @@ const ArenaLobby: React.FC = () => {
             {/* AI Opponent Reveal */}
             <div className="flex flex-col items-center mb-10 w-full">
               <div className="mb-2">{ai.avatar}</div>
-              <GlitchTitle text={ai.name} className="text-3xl md:text-4xl mb-1" />
+              <div className="text-3xl md:text-4xl mb-1 font-extrabold text-white">{ai.name}</div>
               <div className="text-sm text-cyan-200 flex items-center gap-2 font-mono tracking-wide">
                 <Bot size={16} className="inline-block" /> AI Opponent
               </div>
