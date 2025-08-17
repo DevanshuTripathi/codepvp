@@ -22,7 +22,7 @@ export default function Home() {
         </p>
 
         <nav className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-          <Link to="/SinglePlayer">
+          <Link to="/SoloShowdown">
           <NavButton icon={<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M14.5 17.5 17 20l3-3-2.5-2.5"/>
   <path d="m14 11 6 6"/>
