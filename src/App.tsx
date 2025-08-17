@@ -4,6 +4,7 @@ import Home from "./pages/Home"
 import SinglePlayer from "./pages/SinglePlayer"
 import Signup from "./pages/Signup"
 import Login from "./pages/Login"
+import Problem from "./pages/Problem"
 import './App.css'
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
           <Route path="SinglePlayer" element={<SinglePlayer />} />
+          <Route path="problems/:problemId" element={<Problem />} />
         </Route>
       </Routes>
     </BrowserRouter>
