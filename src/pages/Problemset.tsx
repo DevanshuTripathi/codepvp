@@ -307,7 +307,7 @@ useEffect(() => {
     
       {isChatOpen && (
         <div className="fixed bottom-20 right-6 w-96 h-[36rem] z-[60]">
-          <ChatBox onClose={() => setIsChatOpen(false)} />
+          <ChatBox roomId={teamId ?? ""} onClose={() => setIsChatOpen(false)} />
         </div>
       )}
     

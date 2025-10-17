@@ -588,7 +588,7 @@ const Problem: React.FC = () => {
               </div>
             ) : (
               <div className="h-full">
-                <ChatBox onClose={() => setActiveTab('problem')} />
+                <ChatBox roomId={teamId ?? ""} onClose={() => setActiveTab('problem')} />
               </div>
             )}
           </div>

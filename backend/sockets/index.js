@@ -2,6 +2,7 @@ import { roomHandlers } from "./roomHandlers.js";
 import { gameHandlers } from "./gameHandlers.js";
 import { editorHandlers } from "./editorHandlers.js";
 import { rooms, userToRoom } from "../store/rooms.js";
+import { ChatHandlers } from "./chatHandler.js";
 
 export function setupSocket(io) {
   io.on("connection", (socket) => {
@@ -9,6 +10,8 @@ export function setupSocket(io) {
     roomHandlers(io, socket);
     gameHandlers(io, socket);
     editorHandlers(io, socket);
+    ChatHandlers(io, socket); // after two hours of debugging found i have not added this
+
 
     socket.on("disconnect", () => {
       const username = socket.username;
