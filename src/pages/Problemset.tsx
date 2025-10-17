@@ -50,7 +50,7 @@ export default function Problemset() {
   const [data, setData] = useState<gameRes | null>(null);
   const [teamAFinished, setTeamAFinished] = useState(false);
   const [teamBFinished, setTeamBFinished] = useState(false);
-    const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const { teamId, roomId } = useParams();
 
@@ -87,18 +87,15 @@ export default function Problemset() {
       const teamKey = teamId == "A" ? "teamA" : "teamB";
 
         const players: {
-          pid: {
-            pid: string;
-            ready: boolean;
-            points: number;
-            problemSolved: number;
-          };
+          pid: string;
+          points: number;
+          problemSolved: number;
         }[] = docSnap.data()?.[teamKey].players || [];
 
         let pIdx = -1
 
         pIdx = players.findIndex(
-          (p) => p.pid.pid === currentUserName
+          (p) => p.pid === currentUserName
         );
 
         console.log(pIdx)

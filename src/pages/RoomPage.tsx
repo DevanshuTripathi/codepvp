@@ -3,9 +3,10 @@ import { socket } from '../utils/socket';
 import { useParams } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
 import { useNavigate } from 'react-router-dom';
-import { getDocs, getDoc, collection, query, where, limit, setDoc, doc, updateDoc } from "firebase/firestore";
+import { getDocs, getDoc, collection, query, where, setDoc, doc } from "firebase/firestore";
 import { db } from '../../firebaseConfig';
 import ChatBox from './components/chat-box';
+import type { RoomSettings } from './MultiPlayer';
 
 type PlayerSlotProps = {
     player: { pid: string, ready: boolean } | null;
@@ -57,7 +58,8 @@ const RoomPage: React.FC = () => {
   const [isPublic, setIsPublic] = useState(true);
   const { roomId } = useParams();
   const navigate = useNavigate();
-   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [roomSettings, setRoomSettings] = useState<RoomSettings | null>(null);
 
   //getting firebase user
   const { user, loading } = useUser()
@@ -74,11 +76,19 @@ const RoomPage: React.FC = () => {
   };
 
   useEffect(() => {
+    const fetchSettings = async () => {
+      const roomDoc = await getDoc(doc(db, "rooms", roomId!));
+      if (roomDoc.exists()) {
+        setRoomSettings(roomDoc.data() as RoomSettings);
+      }
+    }
+    fetchSettings();
+  }, [roomId])
+
+  useEffect(() => {
     if(!currentUserName) return;
 
     socket.emit("joinRoom", {roomId, username: currentUserName, SLOT_COUNT});
-
-    handleJoinLeave(roomId, 1)
 
     socket.on("roomUpdate", (room) => {
       setTeamA(room.teamA);
@@ -95,7 +105,6 @@ const RoomPage: React.FC = () => {
     })
 
     return () => {
-      handleJoinLeave(roomId, -1);
       socket.off("roomUpdate");
       socket.off("navigateToProblemset");
     }
@@ -113,66 +122,63 @@ const RoomPage: React.FC = () => {
 
   };
 
-  const handleTogglePrivacy = () => {
+  const handleTogglePrivacy = async () => {
+
     if (owner == currentUserName) {
       socket.emit("togglePrivacy", {isPublic, roomId});
     }
   };
 
-  const handleJoinLeave = async (roomId: string | undefined, join: number) => {
-    const docRef = doc(db, "rooms",roomId! );
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) return;
-
-    const num = docSnap.data().numberOfPeople
-
-    await updateDoc(docRef, {
-      numberOfPeople: num + join
-    })
-  }
-
   const handleStart = async () => {
-    await populateFirebase();
-    socket.emit("startGame", { roomId, username: currentUserName })
-  }
+    // await populateFirebase();
 
-  const populateFirebase = async () => {
-    // First four easy q (Temporary)
+    if (!roomSettings) return;
+
     const q = query(
       collection(db, "ProblemsWithHTC"),
-      where("difficulty", "==", "Easy"),
-      limit(4)
+      where("difficulty", "==", roomSettings.difficulty),
     );
+
     const querySnapshot = await getDocs(q);
-    const docs = querySnapshot.docs.map((doc) => ({
+    const allProblems = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
-    console.log(docs);
+
+    const shuffledProblems = allProblems.sort(() => Math.random() - 0.5);
+    const selectedProblems = shuffledProblems.slice(0, roomSettings.questions);
+
+    const formatPlayers = (teamArr: ({ pid: string; ready: boolean } | null)[]) =>
+      teamArr
+        .filter((player): player is { pid: string; ready: boolean } => player !== null)
+        .map((player) => ({
+          pid: player.pid,
+          problemsSolved: 0,
+          points: 0,
+        }));
+
+    const teamAData = formatPlayers(teamA);
+    const teamBData = formatPlayers(teamB);
+
     await setDoc(doc(db, "RoomSet", roomId!), {
-      winningTeam: "None",
+      winningTeam: null,
       teamA: {
         name: "Team A",
         score: 0,
-        players: teamA.filter(player => player !== null).map((player) => ({
-          pid: player,
-          problemSolved: 0,
-          points: 0,
-        })),
+        players: teamAData,
         solvedProblems: [],
       },
       teamB: {
         name: "Team B",
         score: 0,
-        players: teamB.filter(player => player !== null).map((player) => ({
-          pid: player,
-          problemSolved: 0,
-          points: 0,
-        })),
+        players: teamBData,
         solvedProblems: [],
       },
-      allProblems: docs
+      allProblems: selectedProblems,
+      startedAt: new Date(),
     });
+
+    socket.emit("startGame", { roomId, username: currentUserName, time: roomSettings.time })
   }
 
   return (
@@ -203,6 +209,13 @@ const RoomPage: React.FC = () => {
                     Room is {isPublic ? 'Public' : 'Private'}
                 </label>
             </div>}
+            {roomSettings && (
+              <div className="mt-3 text-cyan-400 text-sm">
+                <p>Difficulty: <span className="text-white">{roomSettings.difficulty}</span></p>
+                <p>Questions: <span className="text-white">{roomSettings.questions}</span></p>
+                <p>Time: <span className="text-white">{roomSettings.time} min</span></p>
+              </div>
+            )}
         </div>
         <button onClick={() => {
           socket.emit("disconnectRoom", {username: currentUserName, roomId});

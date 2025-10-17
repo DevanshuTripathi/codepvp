@@ -1,7 +1,7 @@
-import { rooms, activeTimers } from "../store/rooms.js";
+import { rooms, activeTimers, userToRoom } from "../store/rooms.js";
 
 export function gameHandlers(io, socket) {
-  socket.on("startGame", ({ roomId, username }) => {
+  socket.on("startGame", ({ roomId, username, time }) => {
     const room = rooms[roomId];
     if (!room || room.owner !== username) return;
 
@@ -9,7 +9,7 @@ export function gameHandlers(io, socket) {
     if (!allReady) return;
 
     room.status = "in-progress";
-    room.duration = process.env.TIME_DURATION_TEST || 1800;
+    room.duration = time*60;
     room.startTime = Date.now();
     room.endTime = room.startTime + room.duration * 1000;
 
@@ -41,6 +41,8 @@ export function gameHandlers(io, socket) {
     const finishTime = Date.now();
     room[`team${teamId}FinishedTime`] = finishTime;
 
+    console.log(room.teamAFinishedTime && room.teamBFinishedTime);
+
     io.to(roomId).emit("teamFinishedUpdate", { teamId, finishTime });
 
     if (room.teamAFinishedTime && room.teamBFinishedTime) {
@@ -49,4 +51,16 @@ export function gameHandlers(io, socket) {
       io.to(roomId).emit("matchEnd", { reason: "both_teams_finished" });
     }
   });
+
+  socket.on("deleteRoom", ({ roomId }) => {
+    const room = rooms[roomId];
+
+    const allPlayers = [...room.teamA, ...room.teamB].filter(p => p !== null);
+    allPlayers.forEach(p => {
+      delete userToRoom[p.pid];
+    })
+
+    delete rooms[roomId];
+
+  })
 }

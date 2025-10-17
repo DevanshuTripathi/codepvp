@@ -40,8 +40,9 @@ export const useMatchTimer = (roomId: string | undefined) => {
     const handleMatchEnd = ({ reason }: { reason: string }) => {
       if (reason === "time_up") {
         setTimeLeft("00:00");
-        setIsMatchOver(true);
       }
+      setIsMatchOver(true);
+      socket.emit("deleteRoom", { roomId })
     };
 
     socket.on("matchEnd", handleMatchEnd);

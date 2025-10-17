@@ -17,7 +17,13 @@ export function roomHandlers(io, socket) {
         }
 
         if (!rooms[roomId]) {
-            rooms[roomId] = { owner: username, teamA: Array(SLOT_COUNT).fill(null), teamB: Array(SLOT_COUNT).fill(null), public: true };
+            rooms[roomId] = { 
+                owner: username, 
+                teamA: Array(SLOT_COUNT).fill(null), 
+                teamB: Array(SLOT_COUNT).fill(null), 
+                public: true ,
+                status: 'waiting'
+            };
         }
 
         userToRoom[username] = { roomId };
@@ -39,7 +45,13 @@ export function roomHandlers(io, socket) {
 
     socket.on("joinSlot", ({ roomId, team, slotIndex, username, SLOT_COUNT }) => {
         if (!rooms[roomId]) {
-            rooms[roomId] = { owner: username, teamA: Array(SLOT_COUNT).fill(null), teamB: Array(SLOT_COUNT).fill(null), public: true };
+            rooms[roomId] = { 
+                owner: username, 
+                teamA: Array(SLOT_COUNT).fill(null), 
+                teamB: Array(SLOT_COUNT).fill(null), 
+                public: true ,
+                status: 'waiting'
+            };
         }
         const room = rooms[roomId];
 
