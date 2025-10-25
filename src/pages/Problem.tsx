@@ -127,48 +127,64 @@ const Problem: React.FC = () => {
 
     // Function to mark points for a solved question for a team
     const markPoints = async (roomId: string, teamId: string, problemId: string, passed: number) => {
-      const docRef = doc(db, "RoomSet", roomId!);
-      const docSnap = await getDoc(docRef);
-      const docData = docSnap.data();
-      
-      const teamKey = teamId == "A" ? "teamA" : "teamB"; // Get Team
-      const problemArray = docData?.allProblems || [];
-      const problem = problemArray.find((p: any) => p.id === problemId); // Get Problem solved
+      try {
+        const docRef = doc(db, "RoomSet", roomId!);
+        const docSnap = await getDoc(docRef);
+        const docData = docSnap.data();
 
-      // If problem already marked as solved then dont consider it
-      if (docData?.[teamKey].solvedProblems.includes(problem.title)) return ;
+        const teamKey = teamId == "A" ? "teamA" : "teamB"; // Get Team
+        const problemArray = docData?.allProblems || [];
+        const problem = problemArray.find((p: any) => p.id === problemId) || {};
 
-      // Need a better way to award points because this is exploitable
-      const currentScore = docData?.[teamKey].score;
-      const pointsAwarded = 10 * passed;
+        // compute total testcases for this problem from local problem data
+        const totalTests = (data?.samples?.length || 0) + (data?.hiddenTestCases?.length || 0);
 
-      await updateDoc(docRef, {
-        [`${teamKey}.score`]: currentScore + pointsAwarded,
-      });
+        // Initialize helper structures
+        const teamData = docData?.[teamKey] || {};
+        const solvedProblems: string[] = teamData.solvedProblems || [];
+        const problemBest: { [key: string]: number } = teamData.problemBest || {};
 
-      const players: {
-          pid: string;
-          points: number;
-          problemSolved: number;
-        }[] = docSnap.data()?.[teamKey].players || [];
+        const prevBest = problemBest[problemId] || 0;
 
-      const playerIndex = players.findIndex(
-        (p) => p.pid === currentUserName
-      );
+        // If this submission doesn't improve the team's best for this problem, ignore it
+        if (passed <= prevBest) return;
 
-      if (playerIndex !== -1) {
-        const updatedPlayers = [...docData?.[teamKey].players];
-        updatedPlayers[playerIndex] = {
-          ...updatedPlayers[playerIndex],
-          points: updatedPlayers[playerIndex].points + pointsAwarded,
-          problemsSolved: updatedPlayers[playerIndex].problemsSolved + passed, // or just +1 if 1 problem solved
-        };
+        const pointsPerTest = 10; // configurable
+        const delta = passed - prevBest;
+        const pointsAwarded = pointsPerTest * delta;
 
-        await updateDoc(docRef, {
-          [`${teamKey}.players`]: updatedPlayers,
-        });
+        const updates: any = {};
+
+        // Update team score and best
+        const currentScore = teamData.score || 0;
+        updates[`${teamKey}.score`] = currentScore + pointsAwarded;
+        updates[`${teamKey}.problemBest.${problemId}`] = passed;
+
+        // If this is a full solve (all tests passed) and not already recorded, add to solvedProblems
+        const becameFullySolved = passed === totalTests && !solvedProblems.includes(problem.title);
+        if (becameFullySolved) {
+          updates[`${teamKey}.solvedProblems`] = [...solvedProblems, problem.title];
+        }
+
+        // Update player points and problemsSolved (count only increments on full solve first time)
+        const players: any[] = docSnap.data()?.[teamKey].players || [];
+        const playerIndex = players.findIndex((p) => p.pid === currentUserName);
+
+        if (playerIndex !== -1) {
+          const updatedPlayers = [...players];
+          const player = { ...updatedPlayers[playerIndex] };
+          player.points = (player.points || 0) + pointsAwarded;
+          if (becameFullySolved) {
+            player.problemsSolved = (player.problemsSolved || 0) + 1;
+          }
+          updatedPlayers[playerIndex] = player;
+          updates[`${teamKey}.players`] = updatedPlayers;
+        }
+
+        await updateDoc(docRef, updates);
+      } catch (err) {
+        console.error('markPoints error', err);
       }
-
     }
 
     useEffect(() => {
