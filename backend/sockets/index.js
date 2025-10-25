@@ -26,12 +26,12 @@ export function setupSocket(io) {
       room.teamA = room.teamA.filter(player => player !== username);
       room.teamB = room.teamB.filter(player => player !== username);
 
-      delete userToRoom[username];
+      delete userToRoom[username]; // Cleanup after user leaves the room
 
       const isEmpty = room.teamA.length === 0 && room.teamB.length === 0;
 
       if (isEmpty) {
-          delete rooms[roomId];
+          delete rooms[roomId]; // Delete empty room
       } else {
           io.to(roomId).emit("roomUpdate", room);
       }

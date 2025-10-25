@@ -14,7 +14,6 @@ import Dashboard from "./pages/Dahboard"
 import './App.css'
 import { UserProvider } from "./hooks/useUser"
 
-
 function App() {
 
   return (

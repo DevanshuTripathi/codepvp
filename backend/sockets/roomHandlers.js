@@ -6,6 +6,8 @@ export function roomHandlers(io, socket) {
         socket.roomId = roomId;
 
         const existing = userToRoom[username];
+
+        // If user present in a different room leave from that room
         if (existing && existing.roomId !== roomId) {
             const oldRoom = rooms[existing.roomId];
             if (oldRoom) {
@@ -16,7 +18,7 @@ export function roomHandlers(io, socket) {
             socket.leave(existing.roomId);
         }
 
-        if (!rooms[roomId]) {
+        if (!rooms[roomId]) { // Mock Data 
             rooms[roomId] = { 
                 owner: username, 
                 teamA: Array(SLOT_COUNT).fill(null), 

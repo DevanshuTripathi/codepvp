@@ -3,7 +3,7 @@ import Editor from '@monaco-editor/react'
 import { editor } from 'monaco-editor'
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../../firebaseConfig';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, runTransaction } from 'firebase/firestore';
 import { socket } from '../utils/socket';
 import { useUser } from '../hooks/useUser';
 import { debounce } from 'lodash';
@@ -11,50 +11,9 @@ import { OrbitProgress } from 'react-loading-indicators';
 import { markTeamSolved } from './Problemset';
 import { useMatchTimer } from '../hooks/useMatchTimer';
 import type { gameRes } from './GameFinishPage';
-
 import ChatBox from './components/chat-box';
 
-
-// interface ProblemData {
-//     category: string;
-//     difficulty: string;
-//     slug: string;
-//     title: string;
-//     stmt: string;
-//     testcases: {
-//             stdin: string;
-//             expected_output: string;
-//             hidden: boolean;
-//             display: {
-//                 input: string;
-//                 output: string
-//             }
-//     }[];
-//     constraints: string[];
-//     starter_code: {
-//       c: string;
-//       cpp: string;
-//       csharp: string;
-//       dart: string;
-//       elixir: string;
-//       erlang: string;
-//       golang: string;
-//       java: string;
-//       javascript: string;
-//       kotlin: string;
-//       php: string;
-//       python: string;
-//       python3: string;
-//       racket: string;
-//       ruby: string;
-//       rust: string;
-//       scala: string;
-//       swift: string;
-//       typescript: string;
-//     }
-//     tags: string[];
-// }
-
+// Problem Data schema stored in firebase
 export interface ProblemData {
   constraints: string;
   difficulty: string;
@@ -127,63 +86,60 @@ const Problem: React.FC = () => {
 
     // Function to mark points for a solved question for a team
     const markPoints = async (roomId: string, teamId: string, problemId: string, passed: number) => {
+      // Use a transaction to avoid race conditions when multiple submissions happen concurrently
+      const docRef = doc(db, "RoomSet", roomId!);
       try {
-        const docRef = doc(db, "RoomSet", roomId!);
-        const docSnap = await getDoc(docRef);
-        const docData = docSnap.data();
+        await runTransaction(db, async (transaction) => {
+          const docSnap = await transaction.get(docRef);
+          const docData = docSnap.data() || {};
 
-        const teamKey = teamId == "A" ? "teamA" : "teamB"; // Get Team
-        const problemArray = docData?.allProblems || [];
-        const problem = problemArray.find((p: any) => p.id === problemId) || {};
+          const teamKey = teamId == "A" ? "teamA" : "teamB";
+          const problemArray = docData?.allProblems || [];
+          const problem = problemArray.find((p: any) => p.id === problemId) || {};
 
-        // compute total testcases for this problem from local problem data
-        const totalTests = (data?.samples?.length || 0) + (data?.hiddenTestCases?.length || 0);
+          const totalTests = (data?.samples?.length || 0) + (data?.hiddenTestCases?.length || 0);
 
-        // Initialize helper structures
-        const teamData = docData?.[teamKey] || {};
-        const solvedProblems: string[] = teamData.solvedProblems || [];
-        const problemBest: { [key: string]: number } = teamData.problemBest || {};
+          const teamData = docData?.[teamKey] || {};
+          const solvedProblems: string[] = teamData.solvedProblems || [];
+          const problemBest: { [key: string]: number } = teamData.problemBest || {};
 
-        const prevBest = problemBest[problemId] || 0;
+          const prevBest = problemBest[problemId] || 0;
 
-        // If this submission doesn't improve the team's best for this problem, ignore it
-        if (passed <= prevBest) return;
+          // No improvement -> nothing to do
+          if (passed <= prevBest) return;
 
-        const pointsPerTest = 10; // configurable
-        const delta = passed - prevBest;
-        const pointsAwarded = pointsPerTest * delta;
+          const pointsPerTest = 10;
+          const delta = passed - prevBest;
+          const pointsAwarded = pointsPerTest * delta;
 
-        const updates: any = {};
+          // Prepare updates
+          const updates: any = {};
+          const currentScore = teamData.score || 0;
+          updates[`${teamKey}.score`] = currentScore + pointsAwarded;
+          updates[`${teamKey}.problemBest.${problemId}`] = passed;
 
-        // Update team score and best
-        const currentScore = teamData.score || 0;
-        updates[`${teamKey}.score`] = currentScore + pointsAwarded;
-        updates[`${teamKey}.problemBest.${problemId}`] = passed;
-
-        // If this is a full solve (all tests passed) and not already recorded, add to solvedProblems
-        const becameFullySolved = passed === totalTests && !solvedProblems.includes(problem.title);
-        if (becameFullySolved) {
-          updates[`${teamKey}.solvedProblems`] = [...solvedProblems, problem.title];
-        }
-
-        // Update player points and problemsSolved (count only increments on full solve first time)
-        const players: any[] = docSnap.data()?.[teamKey].players || [];
-        const playerIndex = players.findIndex((p) => p.pid === currentUserName);
-
-        if (playerIndex !== -1) {
-          const updatedPlayers = [...players];
-          const player = { ...updatedPlayers[playerIndex] };
-          player.points = (player.points || 0) + pointsAwarded;
+          const becameFullySolved = passed === totalTests && !solvedProblems.includes(problem.title);
           if (becameFullySolved) {
-            player.problemsSolved = (player.problemsSolved || 0) + 1;
+            // use new array to avoid arrayUnion complexity inside nested objects
+            updates[`${teamKey}.solvedProblems`] = [...solvedProblems, problem.title];
           }
-          updatedPlayers[playerIndex] = player;
-          updates[`${teamKey}.players`] = updatedPlayers;
-        }
 
-        await updateDoc(docRef, updates);
+          // Update player entry if exists
+          const players: any[] = docData?.[teamKey]?.players || [];
+          const playerIndex = players.findIndex((p) => p.pid === currentUserName);
+          if (playerIndex !== -1) {
+            const updatedPlayers = [...players];
+            const player = { ...updatedPlayers[playerIndex] };
+            player.points = (player.points || 0) + pointsAwarded;
+            if (becameFullySolved) player.problemsSolved = (player.problemsSolved || 0) + 1;
+            updatedPlayers[playerIndex] = player;
+            updates[`${teamKey}.players`] = updatedPlayers;
+          }
+
+          transaction.update(docRef, updates);
+        });
       } catch (err) {
-        console.error('markPoints error', err);
+        console.error('markPoints transaction error', err);
       }
     }
 
@@ -262,10 +218,9 @@ const Problem: React.FC = () => {
         const docSnap = await getDoc(docRef);
         if(docSnap.exists()) {
             setData(docSnap.data() as ProblemData);
-            // setCode(docSnap.data().starter_code.python);
             console.log(docSnap.data());
         } else {
-            console.log("GAY")
+            console.log("GAY"); // This should not be removed from the code(or else)
         }
     }
 
@@ -275,6 +230,11 @@ const Problem: React.FC = () => {
         editorRef.current = editorInstance;
     }
 
+    /*  
+      Called after problem is submitted to Judge0 and tokens are recieved
+      Checks status of all the problems submitted
+      Calls markPoints or markTeamSolved based on testcase validation 
+    */
     const checkStatus = async (tokens: string[], tempRes: TestCases[]) => {
       const tokenQuery = tokens.join(",")
       const baseUrl = import.meta.env.VITE_JUDGE0_URL + `/submissions/batch?tokens=${tokenQuery}&base64_encoded=true&fields=*`;
@@ -300,7 +260,7 @@ const Problem: React.FC = () => {
           }
 
           let data = await response.json();
-          results = data.submissions || data; // judge0 sometimes wraps inside `submissions`
+          results = data.submissions || data;
 
           // Guard: remove nulls
           results = results.filter((res: any) => res !== null);
@@ -328,21 +288,9 @@ const Problem: React.FC = () => {
 
           const stdout = res.stdout ? atob(res.stdout) : null;
           const stderr = res.stderr ? atob(res.stderr) : null;
-          // const compileError = res.compile_output ? atob(res.compile_output) : null;
 
           const verdict = res.status?.description || "Unknown";
           const passed = res.status?.id === 3; // 3 = Accepted
-
-
-          // let finalOutput = `\nTestcase ${idx + 1}:\nStatus: ${verdict}\n`;
-          // if (stdout) finalOutput += `Output:\n${stdout}\n`;
-          // if (stderr) finalOutput += `Error:\n${stderr}\n`;
-          // if (compileError) finalOutput += `Compile Error:\n${compileError}\n`;
-
-          // tempRes[idx].output = stdout ?? "";
-          // tempRes[idx].error = stderr ? true : false;
-          // tempRes[idx].errorMessage = stderr ?? "";
-          // tempRes[idx].verdict = verdict;
 
           tempRes[idx] = {
             ...tempRes[idx],
@@ -378,6 +326,11 @@ const Problem: React.FC = () => {
       }, 100);
     };
 
+    /*
+      Called when user clicks Submit
+      Sends code along with testcases to Judge0 and gets back tokens which is then checked
+      via checkStatus funciton
+    */
     async function Run() {
         setIsLoading(true);
         const sourceCode = editorRef.current?.getValue();
@@ -443,8 +396,6 @@ const Problem: React.FC = () => {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
-                // 'X-RapidAPI-Key': import.meta.env.VITE_RAPID_API_KEY as string,
-                // 'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
             },
             body: JSON.stringify({
               submissions: submissions
@@ -491,10 +442,7 @@ const Problem: React.FC = () => {
           (p) => p.pid === currentUserName
         );
 
-        console.log(pIdx)
-        console.log(currentUserName)
-
-        if (pIdx == -1) navigate("/404");
+        if (pIdx == -1) navigate("/404"); // Player not found in the team
   
         setPassData(docSnap.data() as gameRes)
         

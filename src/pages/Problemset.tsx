@@ -8,26 +8,28 @@ import type { gameRes } from "./GameFinishPage";
 import { useUser } from "../hooks/useUser";
 import ChatBox from "./components/chat-box";
 
+// Marks the question solved for the whole team
 export const markTeamSolved = async (teamId: string, problemId: string, roomId: string, data: gameRes) => {
 
-    const docRef = doc(db, "RoomSet", roomId!);
-    const docSnap = await getDoc(docRef);
+  const docRef = doc(db, "RoomSet", roomId!);
+  const docSnap = await getDoc(docRef);
 
-    const problemArray = docSnap.data()?.allProblems || [];
+  const problemArray = docSnap.data()?.allProblems || [];
 
-    const problem = problemArray.find((p: any) => p.id === problemId);
-    const teamKey = teamId === "A" ? "teamA" : "teamB";
+  const problem = problemArray.find((p: any) => p.id === problemId);
+  const teamKey = teamId === "A" ? "teamA" : "teamB";
 
-    const solvedProblems = data?.[teamKey]?.solvedProblems || [];
+  const solvedProblems = data?.[teamKey]?.solvedProblems || [];
 
-    if (!solvedProblems.includes(problem.title)) {
-      solvedProblems.push(problem.title);
-    }
-
-    await updateDoc(docRef, {
-      [`${teamKey}.solvedProblems`]: solvedProblems,
-    });
+  // If not already solved then add it to solved list
+  if (!solvedProblems.includes(problem.title)) {
+    solvedProblems.push(problem.title);
   }
+
+  await updateDoc(docRef, {
+    [`${teamKey}.solvedProblems`]: solvedProblems,
+  });
+}
 
 const StatusIcon: React.FC<{ solved: boolean }> = ({ solved }) => {
   if (solved) {
@@ -51,22 +53,17 @@ export default function Problemset() {
   const [teamAFinished, setTeamAFinished] = useState(false);
   const [teamBFinished, setTeamBFinished] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-
   const { teamId, roomId } = useParams();
-
   const navigate = useNavigate();
-
   const { timeLeft, isMatchOver } = useMatchTimer(roomId);
-
   const { user, loading } = useUser();
-
   const currentUserName = user?.displayName || user?.email || "Anon";
 
   useEffect(() => {
     if(!user && !loading) navigate("/login");
   })
 
-
+  // After match is Over navigate to results page
   useEffect(() => {
       if (isMatchOver) {
           console.log("Match ended. Auto-submitting code...");
@@ -114,46 +111,8 @@ export default function Problemset() {
     socket.emit("joinProblemset", { roomId, teamId });
   }, [roomId, teamId]);
 
-  // useEffect(() => {
-  //       // As soon as component loads, ask for match details
-  //       socket.emit("getMatchDetails", { roomId });
-
-  //       // Listen for the server's response with the endTime
-  //       socket.on("matchDetails", ({ endTime }: { endTime: number }) => {
-  //           // Once we have the endTime, start the visual countdown
-  //           const intervalId = setInterval(() => {
-  //               const remaining = Math.max(0, endTime - Date.now());
-
-  //               if (remaining === 0) {
-  //                   setTimeLeft("00:00");
-  //                   clearInterval(intervalId);
-  //                   return;
-  //               }
-  //               const minutes = String(Math.floor(remaining / 60000)).padStart(2, '0');
-  //               const seconds = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
-  //               setTimeLeft(`${minutes}:${seconds}`);
-  //           }, 500);
-
-  //           // Cleanup interval on unmount
-  //           return () => clearInterval(intervalId);
-  //       });
-
-  //       // Listen for the match ending from the server
-  //       socket.on("matchEnd", ({ reason }: { reason: string }) => {
-  //           if (reason === "time_up") {
-  //               alert("Time's up!");
-  //           }
-  //       });
-
-  //       // Cleanup socket listeners on unmount
-  //       return () => {
-  //           socket.off("matchDetails");
-  //           socket.off("matchEnd");
-  //       };
-  //   }, [roomId]);
-
-useEffect(() => {
-    const handleSolvedProblem = ({ problemId, teamId }: { problemId: string, teamId: string }) => {
+  useEffect(() => {
+    const handleSolvedProblem = ({  problemId, teamId }: { problemId: string, teamId: string }) => {
       markTeamSolved(teamId, problemId, roomId!, data!);
     };
     

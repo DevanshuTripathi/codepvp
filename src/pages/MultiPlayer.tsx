@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
 import { db } from '../../firebaseConfig';
 import { doc, setDoc } from 'firebase/firestore';
+import LoadingScreen from './components/LoadingScreen';
 
 interface activeRoom {
   name: string;
@@ -24,6 +25,8 @@ const MultiPlayer: React.FC = () => {
   const [code, setCode] = useState();
   const [activeRooms, setActiveRooms] = useState<activeRoom[]>([]);
   const [showCreateOptions, setShowCreateOptions] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     difficulty: 'Easy',
     size: '2v2',
@@ -39,11 +42,25 @@ const MultiPlayer: React.FC = () => {
     if(!user && !loading) navigate("/login");
   })
 
-  const handleCreateRoom = () => {
+  
+  const handleCreateRoom = async () => {
+    setIsCreatingRoom(true);
     const roomId = Math.floor(Math.random() * 100000) + 100000;
     // populateFirebase(roomId)
-    populateFirebase(roomId, roomSettings);
-    navigate(`/room/${roomId}`);
+    
+    try {
+      // Populate Firebase with room settings
+      await populateFirebase(roomId, roomSettings);
+      
+      // Minimum loading time for better UX (1.5 seconds)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Navigate to room
+      navigate(`/room/${roomId}`);
+    } catch (error) {
+      console.error("Error creating room:", error);
+      setIsCreatingRoom(false);
+    }
   }
 
   const getActiveRooms = async () => {
@@ -116,8 +133,16 @@ const MultiPlayer: React.FC = () => {
 
   }
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
+    setIsJoiningRoom(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
     navigate(`/room/${code}`);
+  }
+
+  const handleCLickJoin = async (Id: string) => {
+    setIsJoiningRoom(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    navigate(`/room/${Id}`);
   }
 
   const handleChange = (e : any) => {
@@ -129,6 +154,15 @@ const MultiPlayer: React.FC = () => {
       ...prev,
       [setting]: value,
     }));
+  }
+
+  // Show loading screen when creating room
+  if (isCreatingRoom) {
+    return <LoadingScreen message="Creating Room\" />;
+  }
+
+  if (isJoiningRoom) {
+    return <LoadingScreen message="Joining Room\" />;
   }
 
   return (
@@ -293,7 +327,12 @@ const MultiPlayer: React.FC = () => {
                     <p className='text-lg text-cyan-200 font-bold tracking-wider'>{ room.roomId }</p>
                     <p className='text-sm text-cyan-500' >{ room.numberOfPeople }/8 Players</p>
                   </div>
-                  <button onClick={() => navigate(`/room/${room.roomId}`)} className='bg-cyan-400/80 text-gray-900 font-bold py-1 px-4 text-sm rounded-md cursor-pointer '>
+                  <button onClick={() => {
+                    handleCLickJoin(room.roomId.toString());
+
+                  }} 
+                  className='bg-cyan-400/80 text-gray-900 font-bold py-1 px-4 text-sm rounded-md cursor-pointer '
+                  >
                     Join
                   </button>
                 </div>

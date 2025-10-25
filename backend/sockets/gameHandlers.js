@@ -8,8 +8,8 @@ export function gameHandlers(io, socket) {
     const allReady = [...room.teamA, ...room.teamB].filter(Boolean).every(p => p.ready);
     if (!allReady) return;
 
-    room.status = "in-progress";
-    room.duration = time*60;
+    room.status = "in-progress"; // CHange room status so doesnt show in active rooms list
+    room.duration = time*60; // Time recieved is in minutes
     room.startTime = Date.now();
     room.endTime = room.startTime + room.duration * 1000;
 

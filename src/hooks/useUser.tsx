@@ -1,9 +1,12 @@
-// useUser hook to get user info and auth
+/*
+----- useUser hook for getting userContext -----
+*/
 
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { createContext, useContext, useState, useEffect } from "react";
 import { auth } from "../../firebaseConfig";
 
+// Contains user and loading for auth
 type UserContextType = {
   user: User | null;
   loading: boolean;
@@ -18,10 +21,11 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Getting auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(false);
+      setLoading(false); // Once auth is succesfull set loading to false
     });
 
     return () => unsubscribe();

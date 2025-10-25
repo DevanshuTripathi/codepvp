@@ -1,4 +1,6 @@
-// Socket connection 
+/*
+------ Socket Connection ------
+*/
 
 import { io } from "socket.io-client";
 
