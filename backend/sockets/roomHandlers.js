@@ -23,12 +23,17 @@ export function roomHandlers(io, socket) {
                 owner: username, 
                 teamA: Array(SLOT_COUNT).fill(null), 
                 teamB: Array(SLOT_COUNT).fill(null), 
+                spectators: [],
                 public: true ,
                 status: 'waiting'
             };
         }
 
-        userToRoom[username] = { roomId };
+        if (!rooms[roomId].spectators) {
+            rooms[roomId].spectators = [];
+        }
+
+        userToRoom[username] = { roomId, role: "player" };
         socket.join(roomId);
 
         console.log(socket.username, "Joined room:", socket.roomId)
@@ -46,34 +51,77 @@ export function roomHandlers(io, socket) {
     });
 
     socket.on("joinSlot", ({ roomId, team, slotIndex, username, SLOT_COUNT }) => {
+        const actor = socket.username || username;
+        if (!actor || !roomId || (team !== "A" && team !== "B")) return;
+
         if (!rooms[roomId]) {
             rooms[roomId] = { 
-                owner: username, 
+                owner: actor, 
                 teamA: Array(SLOT_COUNT).fill(null), 
                 teamB: Array(SLOT_COUNT).fill(null), 
+                spectators: [],
                 public: true ,
                 status: 'waiting'
             };
         }
         const room = rooms[roomId];
 
-        room.teamA = room.teamA.map(p => (p?.pid === username ? null : p));
-        room.teamB = room.teamB.map(p => (p?.pid === username ? null : p));
+        if (!room.spectators) {
+            room.spectators = [];
+        }
+
+        room.spectators = room.spectators.filter((s) => s !== actor);
+
+        room.teamA = room.teamA.map(p => (p?.pid === actor ? null : p));
+        room.teamB = room.teamB.map(p => (p?.pid === actor ? null : p));
+
+        if (slotIndex < 0 || slotIndex >= room.teamA.length) return;
 
         const targetTeam = team === "A" ? room.teamA : room.teamB;
-        if (!targetTeam[slotIndex]) targetTeam[slotIndex] = { pid: username, ready: false };
+        if (!targetTeam[slotIndex]) targetTeam[slotIndex] = { pid: actor, ready: false };
 
+        socket.username = actor;
+        socket.roomId = roomId;
         socket.join(roomId);
-        userToRoom[username] = { roomId, username };
+        userToRoom[actor] = { roomId, role: "player", username: actor };
+
+        io.to(roomId).emit("roomUpdate", room);
+    });
+
+    socket.on("joinAsSpectator", ({ roomId, username }) => {
+        const actor = socket.username || username;
+        if (!actor || !roomId) return;
+
+        const room = rooms[roomId];
+        if (!room) return;
+
+        if (!room.spectators) {
+            room.spectators = [];
+        }
+
+        room.teamA = room.teamA.map(p => (p?.pid === actor ? null : p));
+        room.teamB = room.teamB.map(p => (p?.pid === actor ? null : p));
+
+        if (!room.spectators.includes(actor)) {
+            room.spectators.push(actor);
+        }
+
+        socket.username = actor;
+        socket.roomId = roomId;
+        userToRoom[actor] = { roomId, role: "spectator" };
+        socket.join(roomId);
 
         io.to(roomId).emit("roomUpdate", room);
     });
 
     socket.on("toggleReady", ({ roomId, team, slotIndex, username }) => {
+        const actor = socket.username || username;
+        if (!actor) return;
+
         const room = rooms[roomId];
         if (!room) return;
         const slot = room[`team${team}`][slotIndex];
-        if (slot?.pid === username) {
+        if (slot?.pid === actor) {
             slot.ready = !slot.ready;
             io.to(roomId).emit("roomUpdate", room);
         }
@@ -83,12 +131,17 @@ export function roomHandlers(io, socket) {
         const room = rooms[roomId];
         if(!room) return;
 
+        if (!room.spectators) {
+            room.spectators = [];
+        }
+
         room.teamA = room.teamA.map(p => (p && p.pid === username ? null : p));
         room.teamB = room.teamB.map(p => (p && p.pid === username ? null : p));
+        room.spectators = room.spectators.filter((s) => s !== username);
 
         delete userToRoom[username];
 
-        const isEmpty = [...room.teamA, ...room.teamB].every(p => p === null);
+        const isEmpty = [...room.teamA, ...room.teamB].every(p => p === null) && room.spectators.length === 0;
 
         if (isEmpty) {
             delete rooms[roomId];

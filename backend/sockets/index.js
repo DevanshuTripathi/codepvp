@@ -33,13 +33,16 @@ export function setupSocket(io) {
       const room = rooms[roomId];
       if (!room) return;
 
-      room.teamA = room.teamA.filter(player => player !== username);
-      room.teamB = room.teamB.filter(player => player !== username);
+      room.teamA = room.teamA.map((player) => (player?.pid === username ? null : player));
+      room.teamB = room.teamB.map((player) => (player?.pid === username ? null : player));
+      room.spectators = (room.spectators || []).filter((spectator) => spectator !== username);
 
       delete userToRoom[username]; // Cleanup after user leaves the room
       delete frontendUserToRoom[username];
 
-      const isEmpty = room.teamA.length === 0 && room.teamB.length === 0;
+      const isEmpty =
+        [...room.teamA, ...room.teamB].every((slot) => slot === null) &&
+        (room.spectators || []).length === 0;
 
       if (isEmpty) {
           delete rooms[roomId]; // Delete empty room

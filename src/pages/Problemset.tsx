@@ -1,7 +1,7 @@
 import { db } from "../../firebaseConfig";
 import { getDoc, doc, updateDoc } from "firebase/firestore";
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { socket } from "../utils/socket";
 import { useMatchTimer } from '../hooks/useMatchTimer';
 import type { gameRes } from "./GameFinishPage";
@@ -87,14 +87,17 @@ const StatusIcon: React.FC<{ solved: boolean }> = ({ solved }) => {
 
 export default function Problemset() {
   const [data, setData] = useState<gameRes | null>(null);
+  const [isRoomSetMissing, setIsRoomSetMissing] = useState(false);
   const [teamAFinished, setTeamAFinished] = useState(false);
   const [teamBFinished, setTeamBFinished] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const { teamId, roomId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { timeLeft, isMatchOver } = useMatchTimer(roomId);
   const { user, loading } = useUser();
   const [currentUserName, setCurrentUserName] = useState( user?.displayName || user?.email || "Anon")
+  const isSpectator = searchParams.get("spectator") === "1";
 
   useEffect(() => {
     if(!user && !loading) navigate("/login");
@@ -116,7 +119,16 @@ export default function Problemset() {
       const docSnap = await getDoc(docRef);
 
       // Redirects to 404 if room not created earlier
-      if(!docSnap.exists()) navigate("/404");
+      if (!docSnap.exists()) {
+        if (isSpectator) {
+          setIsRoomSetMissing(true);
+          return;
+        }
+        navigate("/404");
+        return;
+      }
+
+      setIsRoomSetMissing(false);
 
       setCurrentUserName(user?.displayName || user?.email || "Anon");
 
@@ -144,7 +156,7 @@ export default function Problemset() {
       }
 
     fetchData();
-  }, [roomId, teamId, navigate]);
+  }, [roomId, teamId, navigate, isSpectator, user]);
 
   useEffect(() => {
     socket.emit("joinProblemset", { roomId, teamId });
@@ -152,6 +164,7 @@ export default function Problemset() {
 
   useEffect(() => {
     const handleSolvedProblem = ({  problemId, teamId, username }: { problemId: string, teamId: string, username: string }) => {
+      if (isSpectator) return;
       markTeamSolved(teamId, problemId, roomId!, username);
     };
     
@@ -170,7 +183,7 @@ export default function Problemset() {
       socket.off("solvedProblem", handleSolvedProblem);
       socket.off("teamFinishedUpdate", handleTeamFinished);
     };
-  }, [roomId, data]);
+  }, [roomId, data, isSpectator]);
 
   const allProblemsSolved = useMemo(() => {
     if (!data || !teamId) return false;
@@ -184,12 +197,33 @@ export default function Problemset() {
 
 
   const handleFinishGame = () => {
+    if (isSpectator) return;
+
     if (allProblemsSolved) {
-      socket.emit("finishGame", { roomId, teamId });
+      socket.emit("finishGame", { roomId, teamId, username: currentUserName });
     }
   };
 
   const currentUserTeamFinished = teamId === 'A' ? teamAFinished : teamBFinished;
+
+  if (isRoomSetMissing) {
+    return (
+      <div className="flex justify-center items-center bg-gray-900 h-dvh w-dvw">
+        <div className="z-10 flex flex-col p-8 max-w-2xl w-full bg-black/30 backdrop-blur-md border border-cyan-400/20 rounded-xl shadow-2xl shadow-cyan-500/10 text-center">
+          <h2 className="text-3xl font-bold text-cyan-300 mb-4">Match Not Started Yet</h2>
+          <p className="text-gray-300 mb-6">
+            Spectator view will be available once the room owner starts the game.
+          </p>
+          <button
+            onClick={() => navigate(`/room/${roomId}`)}
+            className="mx-auto font-bold text-cyan-300 border-2 border-cyan-400/50 rounded-lg px-6 py-2 transition-all duration-300 hover:bg-cyan-300 hover:text-gray-900"
+          >
+            Back to Room
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex justify-center items-center bg-gray-900 h-dvh w-dvw">
@@ -240,12 +274,12 @@ export default function Problemset() {
                 <button
                   onClick={() => {
                     navigate(
-                      `/room/${roomId}/problems/${problem.id}/team/${teamId}`
+                      `/room/${roomId}/problems/${problem.id}/team/${teamId}${isSpectator ? "?spectator=1" : ""}`
                     );
                   }}
                   className="font-bold text-cyan-300 border-2 border-cyan-400/50 rounded-lg px-5 py-2 
                 transition-all duration-300 hover:bg-cyan-300 hover:text-gray-900"
-                  disabled={isMatchOver || currentUserTeamFinished}
+                  disabled={isMatchOver || (!isSpectator && currentUserTeamFinished)}
                 >
                   View
                 </button>
@@ -254,7 +288,7 @@ export default function Problemset() {
           ))}
         </div>
         <div className="mt-8 flex flex-col items-center justify-center text-center">
-          {allProblemsSolved && !currentUserTeamFinished && (
+          {allProblemsSolved && !currentUserTeamFinished && !isSpectator && (
             <button
               onClick={handleFinishGame}
               className="font-bold text-gray-900 bg-green-400 border-2 border-green-400 rounded-lg px-8 py-3 text-xl
@@ -264,6 +298,10 @@ export default function Problemset() {
             >
               Finish Game
             </button>
+          )}
+
+          {isSpectator && (
+            <p className="text-cyan-300 font-semibold">Spectator mode: read-only view</p>
           )}
 
           {currentUserTeamFinished && (

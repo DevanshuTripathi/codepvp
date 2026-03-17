@@ -38,6 +38,8 @@ export function gameHandlers(io, socket) {
     const room = rooms[roomId];
     if (!room || room.status !== "in-progress") return;
 
+    if (!isPlayerInTeam(room, teamId, socket.username)) return;
+
     const finishTime = Date.now();
     room[`team${teamId}FinishedTime`] = finishTime;
 
@@ -65,4 +67,13 @@ export function gameHandlers(io, socket) {
     delete rooms[roomId];
 
   })
+}
+
+function isPlayerInTeam(room, teamId, username) {
+  if (!room || !teamId || !username) return false;
+
+  const team = room[`team${teamId}`];
+  if (!Array.isArray(team)) return false;
+
+  return team.some((slot) => slot?.pid === username);
 }

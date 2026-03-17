@@ -57,6 +57,7 @@ const RoomPage: React.FC = () => {
   const [teamB, setTeamB] = useState<( { pid: string, ready: boolean } | null )[]>(Array(SLOT_COUNT).fill(null));
   const [owner, setOwner] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(true);
+  const [spectators, setSpectators] = useState<string[]>([]);
   const { roomId } = useParams();
   const navigate = useNavigate();
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -72,7 +73,9 @@ const RoomPage: React.FC = () => {
   })
   
   // Placeholder for the current user's ID
-  const currentUserName = user?.displayName || user?.email || "Anon";
+  const currentUserName = user?.displayName || user?.email || "";
+  const isSpectator = spectators.includes(currentUserName);
+  const isInTeam = teamA.some((p) => p?.pid === currentUserName) || teamB.some((p) => p?.pid === currentUserName);
 
   const handleToggleReady = (team: 'A' | 'B', slotIndex: number) => {
     socket.emit("toggleReady", { roomId, team, slotIndex, username: currentUserName });
@@ -102,14 +105,26 @@ const RoomPage: React.FC = () => {
       setTeamB(room.teamB);
       setOwner(room.owner);
       setIsPublic(room.public);
+      setSpectators(room.spectators || []);
     });
 
     // Finds team associated with the current user and navigates to problemset of that team
     socket.on("navigateToProblemset", ({roomId, room}) => {
       console.log("🔥 navigateToProblemset event received:", roomId, room);
-      const team = room.teamA.some((p: { pid: string; ready: boolean } | null) => p && p.pid === currentUserName) ? "A" : "B";
-      console.log("➡️ Determined team:", team, "for user:", currentUserName);
-      navigate(`/room/${roomId}/problemset/team/${team}`);
+      const inTeamA = room.teamA.some((p: { pid: string; ready: boolean } | null) => p && p.pid === currentUserName);
+      const inTeamB = room.teamB.some((p: { pid: string; ready: boolean } | null) => p && p.pid === currentUserName);
+
+      if (inTeamA) {
+        navigate(`/room/${roomId}/problemset/team/A`);
+        return;
+      }
+
+      if (inTeamB) {
+        navigate(`/room/${roomId}/problemset/team/B`);
+        return;
+      }
+
+      navigate(`/room/${roomId}/problemset/team/A?spectator=1`);
     })
 
     return () => {
@@ -120,6 +135,8 @@ const RoomPage: React.FC = () => {
   }, [roomId, currentUserName]);
 
   const handleJoinSlot = (team: 'A' | 'B', slotIndex: number) => {
+    if (!currentUserName) return;
+
     socket.emit("joinSlot", {
       roomId,
       team,
@@ -131,6 +148,7 @@ const RoomPage: React.FC = () => {
   };
 
   const handleTogglePrivacy = async () => {
+    if (!currentUserName) return;
 
     if (owner == currentUserName) {
       socket.emit("togglePrivacy", {isPublic, roomId});
@@ -138,6 +156,7 @@ const RoomPage: React.FC = () => {
   };
 
   const handleStart = async () => {
+    if (!currentUserName) return;
 
     if (!roomSettings) return; // Cannot start without room settings
 
@@ -190,6 +209,11 @@ const RoomPage: React.FC = () => {
 
     socket.emit("startGame", { roomId, username: currentUserName, time: roomSettings.time })
   }
+
+  const handleJoinAsSpectator = () => {
+    if (!currentUserName) return;
+    socket.emit("joinAsSpectator", { roomId, username: currentUserName });
+  };
 
   if (isLoading) {
     return <LoadingScreen message='Setting Up' />;
@@ -273,6 +297,39 @@ const RoomPage: React.FC = () => {
               />
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="w-full mb-6 p-4 border border-gray-700/50 rounded-lg bg-gray-900/40">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-lg text-cyan-300 font-semibold">Spectator Mode</h4>
+            <p className="text-sm text-gray-400">Watch Team A or Team B in read-only mode.</p>
+          </div>
+          {!isInTeam && (
+            <button
+              onClick={handleJoinAsSpectator}
+              className="px-4 py-2 rounded-lg border border-cyan-400/50 text-cyan-300 hover:bg-cyan-300 hover:text-gray-900 transition-all"
+            >
+              {isSpectator ? "You are Spectating" : "Join as Spectator"}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            onClick={() => navigate(`/room/${roomId}/problemset/team/A?spectator=1`)}
+            className="px-4 py-2 rounded-lg border border-cyan-400/40 text-cyan-300 hover:bg-cyan-900/30 transition-all"
+          >
+            Spectate Team A
+          </button>
+          <button
+            onClick={() => navigate(`/room/${roomId}/problemset/team/B?spectator=1`)}
+            className="px-4 py-2 rounded-lg border border-purple-400/40 text-purple-300 hover:bg-purple-900/30 transition-all"
+          >
+            Spectate Team B
+          </button>
+          <span className="text-gray-400 text-sm self-center">Spectators: {spectators.length}</span>
         </div>
       </div>
 

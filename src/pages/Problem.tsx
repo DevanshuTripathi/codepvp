@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Editor from '@monaco-editor/react'
 import { editor } from 'monaco-editor'
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { db } from '../../firebaseConfig';
 import { doc, getDoc} from 'firebase/firestore';
 import { socket } from '../utils/socket';
@@ -62,6 +62,7 @@ const Problem: React.FC = () => {
 
   const { problemId } = useParams<{ problemId: string }>();
   const { roomId, teamId } = useParams<{ roomId: string, teamId: string }>();
+  const [searchParams] = useSearchParams();
 
   const [data, setData] = useState<ProblemData | null>(null);
 //  const [passData, setPassData] = useState<gameRes | null>(null);
@@ -81,6 +82,7 @@ const Problem: React.FC = () => {
   const storageKey = `code_${roomId}_${problemId}_${teamId}_${language}`;
 
   const navigate = useNavigate();
+  const isSpectator = searchParams.get("spectator") === "1";
 
   const { timeLeft, isMatchOver } = useMatchTimer(roomId);
 //   const hasAutoSubmitted = useRef(false);
@@ -162,13 +164,15 @@ const Problem: React.FC = () => {
   const isLocalChange = useRef(false);
   const sendChange = useMemo(() =>
    debounce((newValue: string) => {
+    if (isSpectator) return;
     socket?.emit("editorChange", { roomId, teamId, problemId, code: newValue, source: currentUserName });
     isLocalChange.current = false; // After sending, reset
    }, 1000),
-   [socket, roomId, teamId, problemId, currentUserName]
+     [socket, roomId, teamId, problemId, currentUserName, isSpectator]
   );
 
   function handleEditorChange(newValue: string | undefined) {
+     if (isSpectator) return;
    const codeValue = newValue || "";
    setCode(codeValue);
    // Save to localStorage for persistence on refresh
@@ -251,15 +255,16 @@ const Problem: React.FC = () => {
 
     if(!roomId || !problemId) return;
 
-    socket.emit("joinProblemRoom", { roomId, teamId, problemId, username: currentUserName });
+    socket.emit("joinProblemRoom", { roomId, teamId, problemId, username: currentUserName, spectator: isSpectator });
 
-  }, [roomId, problemId, currentUserName]);
+  }, [roomId, problemId, currentUserName, isSpectator]);
 
   // Listening changes on editor (ignore remote if local typing)
   useEffect(() => {
     if (!socket) return;
 
     const handleRemoteChange = (data: { code: string; source: string }) => {
+      if (isSpectator && data.source === currentUserName) return;
       if (data.source === currentUserName) return;
       if (isLocalChange.current) return; // Don't overwrite local typing
 
@@ -279,7 +284,7 @@ const Problem: React.FC = () => {
     return () => {
       socket.off("editorUpdate", handleRemoteChange);
     };
-  }, [socket, currentUserName, storageKey]);
+  }, [socket, currentUserName, storageKey, isSpectator]);
 
   // Flush debounce on unmount to avoid losing unsent changes
   useEffect(() => {
@@ -315,6 +320,7 @@ const Problem: React.FC = () => {
 
     // Handles Code Submission
     const handleSubmit = async () => {
+      if (isSpectator) return;
       setIsLoading(true);
       const sourceCode = editorRef.current?.getValue();
       if(sourceCode === ""){ 
@@ -346,7 +352,9 @@ const Problem: React.FC = () => {
 
         // Mark Points here
 		if (data.ac) {
+      if (!isSpectator) {
 			markTeamSolved(teamId!, problemId!, roomId!, currentUserName)
+      }
 		}
 
         setIsLoading(false);
@@ -591,12 +599,12 @@ const [activeTab, setActiveTab] = useState<'problem' | 'chat'>('problem');
             onClick={handleSubmit}
             className="font-bold text-gray-900 bg-green-400 border-2 border-green-400 rounded-lg px-4 py-1.5 transition-all duration-300 hover:bg-transparent hover:text-green-300
             disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isMatchOver}
+            disabled={isMatchOver || isSpectator}
           >
-            Submit
+            {isSpectator ? "Read-only" : "Submit"}
           </button>
           <button 
-            onClick={() => navigate(`/room/${roomId}/problemset/team/${teamId}`)} 
+            onClick={() => navigate(`/room/${roomId}/problemset/team/${teamId}${isSpectator ? "?spectator=1" : ""}`)} 
             className="text-purple-300 hover:text-white transition-colors duration-300 flex items-center gap-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -703,6 +711,7 @@ const [activeTab, setActiveTab] = useState<'problem' | 'chat'>('problem');
          minimap: { enabled: false },
          fontSize: 16,
          wordWrap: 'on',
+           readOnly: isSpectator,
         }}
         onMount={handleEditorDidMount}
         onChange={handleEditorChange}
