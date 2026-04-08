@@ -73,9 +73,9 @@ export function ProfileHeader() {
           
         </div>
 
-        <button className="w-full bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/25 px-4 py-2 rounded-md transition-colors duration-200">
+        {/* <button className="w-full bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/25 px-4 py-2 rounded-md transition-colors duration-200">
           Edit Profile
-        </button>
+        </button> */}
       </div>
     </div>
   )

@@ -11,7 +11,6 @@ import AnimatedBackground from './components/AnimatedBackground'
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
 import { useEffect } from "react"
-import AdComponent from "./components/AdComponent"
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -51,7 +50,6 @@ export default function ProfilePage() {
             <div className="space-y-6">
               <div className="bg-gray-900/50 backdrop-blur-md border border-gray-800 rounded-xl p-6 shadow-lg hover:border-gray-700 transition-colors">
                 <ProfileHeader />
-                <AdComponent />
               </div>
               
              

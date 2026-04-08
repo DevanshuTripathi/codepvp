@@ -548,9 +548,6 @@ const [activeTab, setActiveTab] = useState<'problem' | 'chat' | 'submissions'>('
               {opponents.map((opp: any, idx: number) => (
                 <div key={idx} className="flex items-center gap-1.5 bg-gray-800/60 px-2 py-1 rounded border border-gray-700">
                   <span className="text-sm text-purple-300">{opp.pid}</span>
-                  <span className="text-xs font-mono text-cyan-400 bg-black/40 px-1.5 rounded">
-                    {opp.rating || 'Unrated'}
-                  </span>
                 </div>
               ))}
             </div>

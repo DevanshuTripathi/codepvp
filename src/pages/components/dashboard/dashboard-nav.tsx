@@ -37,9 +37,9 @@ export function DashboardNav() {
             <Link to="/" className="px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-800/50 rounded-md text-sm">
               Home
             </Link>
-            <Link to="/SinglePlayer" className="px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-800/50 rounded-md text-sm">
+            {/* <Link to="/SinglePlayer" className="px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-800/50 rounded-md text-sm">
               SinglePlayer
-            </Link>
+            </Link> */}
             <div className="relative group">
                  <Link to="/MultiPlayer">
               <button className="px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-800/50 rounded-md text-sm flex items-center gap-1">

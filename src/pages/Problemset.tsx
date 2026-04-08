@@ -306,9 +306,6 @@ export default function Problemset() {
                   {opponentsData.map((opp: any, idx: number) => (
                     <div key={idx} className="flex items-center gap-2 bg-gray-800/80 px-3 py-1.5 rounded-md border border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
                       <span className="text-purple-300 font-medium">{opp.pid}</span>
-                      <span className="text-xs font-mono bg-gray-900 px-2 py-0.5 rounded text-cyan-400">
-                        {opp.rating || 'Unrated'}
-                      </span>
                     </div>
                   ))}
                 </div>

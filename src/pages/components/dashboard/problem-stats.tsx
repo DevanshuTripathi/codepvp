@@ -3,7 +3,7 @@ import { useUser } from "../../../hooks/useUser"
 export function ProblemStats() {
   const { userData } = useUser()
   const totalSolved = userData?.questionsSolved || 0
-  const totalProblems = 3691
+  const totalProblems = 2682
   const percentage = totalProblems > 0 ? Math.round((totalSolved / totalProblems) * 100) : 0
 
   // Calculate stroke-dasharray for the circular progress
@@ -16,7 +16,9 @@ export function ProblemStats() {
     <div className="gaming-border gaming-glow bg-card rounded-lg">
       <div className="p-6">
         <div className="flex flex-col items-center">
-          <div className="relative w-48 h-48 mb-4">
+          
+          {/* Circular Progress */}
+          <div className="relative w-48 h-48 mb-6">
             <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
               {/* Background circle */}
               <circle cx="100" cy="100" r={radius} stroke="rgb(55, 65, 81)" strokeWidth="8" fill="none" />
@@ -41,16 +43,23 @@ export function ProblemStats() {
                 </linearGradient>
               </defs>
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
+            
+            {/* Center Stats */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
               <div className="text-3xl font-bold text-foreground">{totalSolved}</div>
               <div className="text-sm text-muted-foreground">/{totalProblems}</div>
-              <div className="text-sm text-purple-400 mt-1">✓ Solved</div>
+              <div className="text-xs font-semibold text-purple-400 mt-1 uppercase tracking-wider">
+                Solo Solved
+              </div>
             </div>
           </div>
 
-          <div className="text-sm text-muted-foreground mb-4">1 Attempting</div>
+          {/* =========================================
+              PREVIOUS STATS GRID (COMMENTED OUT FOR LAUNCH)
+              ========================================= */}
+          {/* <div className="text-sm text-muted-foreground mb-4">1 Attempting</div>
 
-          <div className="grid grid-cols-3 gap-4 w-full">
+          <div className="grid grid-cols-3 gap-4 w-full mb-4">
             <div className="text-center">
               <div className="text-sm text-green-400 font-medium">Easy</div>
               <div className="text-sm text-muted-foreground">26/901</div>
@@ -63,7 +72,22 @@ export function ProblemStats() {
               <div className="text-sm text-purple-400 font-medium">Hard</div>
               <div className="text-sm text-muted-foreground">5/870</div>
             </div>
+          </div> 
+          */}
+
+          {/* Coming Soon Teaser */}
+          <div className="w-full relative overflow-hidden bg-black/40 border border-white/5 rounded-xl p-4 flex flex-col items-center justify-center group transition-colors hover:border-white/10 mt-2">
+            {/* Subtle sweep animation */}
+            <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent group-hover:animate-[shimmer_2s_infinite]"></div>
+            
+            <span className="text-cyan-400 font-bold uppercase tracking-[0.2em] text-sm drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">
+              Coming Soon
+            </span>
+            <span className="text-xs text-gray-500 mt-1 text-center font-medium">
+              Solo Training Campaign
+            </span>
           </div>
+
         </div>
       </div>
     </div>

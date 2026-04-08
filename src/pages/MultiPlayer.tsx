@@ -35,7 +35,7 @@ const MultiPlayer: React.FC = () => {
     mode: 'normal',
     difficulty: 'Easy',
     size: '2v2',
-    questions: 4,
+    questions: 2,
     time: 15,
   });
 
@@ -256,10 +256,13 @@ const MultiPlayer: React.FC = () => {
                       1 v 1
                     </button>
                     <button 
-                      onClick={() => startMatchmaking('2v2')}
-                      className="font-bold text-white bg-gray-800 border-2 border-purple-500/50 rounded-lg py-8 text-2xl hover:bg-purple-500 hover:text-gray-900 transition-all"
+                      disabled
+                      className="group flex items-center justify-center font-bold text-white bg-gray-800 border-2 border-purple-500/50 rounded-lg py-8 text-2xl transition-all cursor-not-allowed hover:border-purple-500/80 hover:bg-gray-800/80"
                     >
-                      2 v 2
+                      <span className="block group-hover:hidden">2 v 2</span>
+                      <span className="hidden group-hover:block text-sm tracking-[0.2em] text-purple-300 uppercase drop-shadow-[0_0_8px_rgba(168,85,247,0.5)]">
+                        Coming Soon
+                      </span>
                     </button>
                   </div>
                   <button 
@@ -288,7 +291,7 @@ const MultiPlayer: React.FC = () => {
               </div>
 
               {/* Mode Setting */}
-              <div className="flex flex-col gap-2">
+              {/* <div className="flex flex-col gap-2">
                 <label className="text-cyan-400 font-medium">Mode</label>
                 <div className="grid grid-cols-2 gap-2">
                   {([
@@ -308,7 +311,7 @@ const MultiPlayer: React.FC = () => {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div> */}
 
               {/* Difficulty Setting */}
               <div className="flex flex-col gap-2">
@@ -331,7 +334,7 @@ const MultiPlayer: React.FC = () => {
               </div>
 
               {/* Room Size Setting */}
-              <div className="flex flex-col gap-2">
+              {/* <div className="flex flex-col gap-2">
                 <label className="text-cyan-400 font-medium">Room Size</label>
                 <div className="grid grid-cols-4 gap-2">
                   {(['1v1', '2v2', '3v3', '4v4'] as const).map((size) => (
@@ -348,7 +351,7 @@ const MultiPlayer: React.FC = () => {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div> */}
               
               {/* Number of Questions Setting */}
               <div className="flex flex-col gap-2">
@@ -359,7 +362,7 @@ const MultiPlayer: React.FC = () => {
                 <input
                   type="range"
                   min="1"
-                  max="6"
+                  max="4"
                   step="1"
                   value={roomSettings.questions}
                   onChange={(e) => handleSettingChange('questions', parseInt(e.target.value))}
