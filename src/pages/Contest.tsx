@@ -52,6 +52,8 @@ const Contest: React.FC = () => {
   const [teamName, setTeamName] = useState('');
   const [teamCode, setTeamCode] = useState('');
 
+  const [completed, setCompleted] = useState(false);
+
   const isAdmin = userData?.role === 'admin'; 
 
   useEffect(() => {
@@ -136,6 +138,23 @@ const Contest: React.FC = () => {
       unsubContest(); // Cleanup listener
     };
   }, [id, user, navigate]);
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const teamRef = doc(db, "Teams", userTeam?.id!);
+        const teamSnap = await getDoc(teamRef);
+        const teamData = teamSnap.data();
+        if("finishedAt" in teamData!) {
+          setCompleted(true);
+        }
+
+      } catch (err) {
+        console.error("error while checking finish status", err);
+      }
+    }
+    checkStatus();
+  })
 
   const injectCurrentUserDetails = () => {
     if (user && userData && !playerDetails[user.uid]) {
@@ -528,6 +547,7 @@ const Contest: React.FC = () => {
                 </div>
 
                 {/* DYNAMIC TELEPORT BUTTON */}
+                { !completed &&
                 <button 
                   onClick={() => navigate(`/room/${contest.id}/problemset/team/${userTeam.id}`)} // Note: You can adjust this route!
                   disabled={contest.status !== 'Ongoing'}
@@ -537,12 +557,13 @@ const Contest: React.FC = () => {
                     : 'bg-gray-800 text-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  {contest.status === 'Ongoing' ? (
+                  {contest.status === 'Ongoing' && !completed ? (
                     <><Play size={20}/> Enter Arena</>
                   ) : (
                     'Awaiting Deployment...'
                   )}
                 </button>
+                }
 
                 {/* LEAVE TEAM BUTTON */}
                 <button

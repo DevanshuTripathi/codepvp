@@ -1,5 +1,5 @@
 import { db } from "../../firebaseConfig";
-import { getDoc, doc, updateDoc, collection, query, where, getDocs, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { getDoc, doc, updateDoc, collection, query, where, getDocs, arrayUnion } from "firebase/firestore";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { socket } from "../utils/socket";
@@ -219,8 +219,13 @@ export default function Problemset() {
       }
     };
 
+    const handleExtraction = () => {
+      navigate(`/room/${roomId}/results`);
+    }
+
     socket.on("solvedProblem", handleSolvedProblem);
     socket.on("teamFinishedUpdate", handleTeamFinished);
+    socket.on("squadExtracted", handleExtraction);
 
     return () => {
       socket.off("solvedProblem", handleSolvedProblem);
@@ -248,13 +253,7 @@ export default function Problemset() {
     if (isFFA && teamId) {
       if (!window.confirm("Are you sure you want to extract? You won't be able to solve more problems, but your completion time will be locked in for tie-breakers.")) return;
       
-      const teamRef = doc(db, "Teams", teamId);
-      await updateDoc(teamRef, {
-        finishedAt: serverTimestamp() // Locks in their final time
-      });
-      
-      navigate(`/room/${roomId}/results`);
-      return;
+      socket.emit("extractSquad", {roomId, teamId});
     }
 
     if (allProblemsSolved) {

@@ -1,5 +1,17 @@
 import { rooms, activeTimers, userToRoom } from "../store/rooms.js";
 import { submissions } from "../server.js";
+import admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+
+import serviceAccount from '../secrets/serviceAccountKey.json' with { type: 'json' };
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const db = admin.firestore();
+
+const contestTeamCollection = db.collection("Teams");
 
 // Helper function to delete all submissions linked to a specific room
 function clearRoomSubmissions(targetRoomId) {
@@ -14,6 +26,13 @@ function clearRoomSubmissions(targetRoomId) {
     console.log(`🧹 Cleaned up ${deletedCount} submissions for room: ${targetRoomId}`);
   }
 }
+
+async function updateTime(teamId) {
+  await contestTeamCollection.doc(teamId).update({
+    finishedAt: FieldValue.serverTimestamp()
+  });
+}
+
 export function gameHandlers(io, socket) {
   socket.on("startGame", ({ roomId, username, time }) => {
     const room = rooms[roomId];
@@ -130,6 +149,16 @@ export function gameHandlers(io, socket) {
       clearRoomSubmissions(roomId);
       io.to(roomId).emit("matchEnd", { reason: "both_teams_finished" });
     }
+  });
+
+  socket.on("extractSquad", ({ roomId, teamId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    updateTime(teamId);
+
+    io.to(`${roomId}-team-${teamId}`).emit("squadExtracted");
+
   });
 
   socket.on("deleteRoom", ({ roomId }) => {

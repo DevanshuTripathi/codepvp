@@ -421,7 +421,12 @@ const Problem: React.FC = () => {
       navigate(`/room/${roomId}/results`);
     }
 
+    const handleExtraction = () => {
+      navigate(`/room/${roomId}/results`);
+    }
+
     socket.on("matchEnd", handleMatchEnd);
+    socket.on("squadExtracted", handleExtraction);
 
     return () => {
       socket.off("matchEnd", handleMatchEnd);
