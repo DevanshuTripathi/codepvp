@@ -119,7 +119,7 @@ const SubmissionsView: React.FC<{ roomId: string, problemId: string, teamId: str
 
   useEffect(() => {
     fetchStatuses();
-    const interval = setInterval(fetchStatuses, 10000);
+    const interval = setInterval(fetchStatuses, 5000);
     return () => clearInterval(interval);
   }, [roomId, problemId, teamId]);
 
@@ -277,10 +277,10 @@ const Problem: React.FC = () => {
   const isLocalChange = useRef(false);
   const sendChange = useMemo(() =>
    debounce((newValue: string) => {
-    socket?.emit("editorChange", { roomId, teamId, problemId, code: newValue, source: currentUserName });
+    socket?.emit("editorChange", { roomId, teamId, problemId, code: newValue, source: currentUserName, language });
     isLocalChange.current = false; // After sending, reset
    }, 1000),
-   [socket, roomId, teamId, problemId, currentUserName]
+   [socket, roomId, teamId, problemId, currentUserName, language]
   );
 
   function handleEditorChange(newValue: string | undefined) {
@@ -406,9 +406,13 @@ const Problem: React.FC = () => {
 
     if(!roomId || !problemId) return;
 
-    socket.emit("joinProblemRoom", { roomId, teamId, problemId, username: currentUserName });
+    socket.emit("joinProblemRoom", { roomId, teamId, problemId, username: currentUserName, language });
 
-  }, [roomId, problemId, currentUserName]);
+    return () => {
+      socket.emit("leaveProblemRoom", { roomId, teamId, problemId, language });
+    }
+
+  }, [roomId, problemId, currentUserName, language]);
 
   useEffect(() => {
     if(!socket) return;
