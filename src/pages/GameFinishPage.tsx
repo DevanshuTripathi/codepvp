@@ -41,7 +41,7 @@ interface MyFFAStats {
   timeTakenStr: string;
 }
 
-const ResultBanner: React.FC<{ didWin: boolean; ratingChange: number | null; isFFA?: boolean }> = ({ didWin, ratingChange, isFFA }) => {
+const ResultBanner: React.FC<{ didWin: boolean; isDraw: boolean; ratingChange: number | null; isFFA?: boolean }> = ({ didWin, isDraw, ratingChange, isFFA }) => {
   return (
     <div className="text-center mb-6 animate-in zoom-in duration-500">
       {isFFA ? (
@@ -53,14 +53,25 @@ const ResultBanner: React.FC<{ didWin: boolean; ratingChange: number | null; isF
         </>
       ) : (
         <>
-          {didWin ? (
-            <h1 className="text-6xl font-bold text-green-400 mb-2" style={{ textShadow: '0 0 15px #2f0, 0 0 20px #2f0' }}>VICTORY</h1>
+          {isDraw ? (
+            <h1 className="text-6xl font-bold text-yellow-400 mb-2" style={{ textShadow: '0 0 15px #fbbf24, 0 0 20px #fbbf24' }}>
+              DRAW
+            </h1>
+          ) : didWin ? (
+            <h1 className="text-6xl font-bold text-green-400 mb-2" style={{ textShadow: '0 0 15px #2f0, 0 0 20px #2f0' }}>
+              VICTORY
+            </h1>
           ) : (
-            <h1 className="text-6xl font-bold text-red-500 mb-2" style={{ textShadow: '0 0 15px #f22, 0 0 20px #f22' }}>DEFEAT</h1>
+            <h1 className="text-6xl font-bold text-red-500 mb-2" style={{ textShadow: '0 0 15px #f22, 0 0 20px #f22' }}>
+              DEFEAT
+            </h1>
           )}
+          
           {ratingChange !== null && (
-            <div className={`text-2xl font-mono font-bold mt-2 animate-bounce ${ratingChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {ratingChange >= 0 ? `+${ratingChange}` : ratingChange} Rating
+            <div className={`text-2xl font-mono font-bold mt-2 animate-bounce ${
+              ratingChange > 0 ? 'text-green-400' : ratingChange < 0 ? 'text-red-400' : 'text-gray-400'
+            }`}>
+              {ratingChange > 0 ? `+${ratingChange}` : ratingChange} Rating
             </div>
           )}
           <p className="text-lg text-gray-400 mt-2">The match has concluded.</p>
@@ -158,12 +169,12 @@ const GameFinishPage: React.FC = () => {
           setMyTeam("Team A");
           const userPlayer = data.teamA.players.find(p => p.pid === currentUserName);
           userPoints = userPlayer?.points ?? 0;
-          winningBonus = (data.teamA.score > data.teamB.score) ? 50 : -50;
+          winningBonus = (data.teamA.score === data.teamB.score) ? 0 : (data.teamA.score > data.teamB.score) ? 50 : -50;
         } else if (inTeamB) {
           setMyTeam("Team B");
           const userPlayer = data.teamB.players.find(p => p.pid === currentUserName);
           userPoints = userPlayer?.points ?? 0;
-          winningBonus = (data.teamB.score > data.teamA.score) ? 50 : -50;
+          winningBonus = (data.teamB.score === data.teamA.score) ? 0 : (data.teamB.score > data.teamA.score) ? 50 : -50;
         }
 
         // Apply rating changes if the user was actually in the game
@@ -260,7 +271,7 @@ const GameFinishPage: React.FC = () => {
     <div className='flex h-dvh justify-center items-center bg-gray-950 overflow-hidden py-10' >
       <div className="z-10 flex flex-col p-8 max-w-4xl w-full bg-black/40 backdrop-blur-md border border-cyan-400/20 rounded-xl shadow-2xl shadow-cyan-500/10">
         
-        <ResultBanner didWin={gameData?.winningTeam === myTeam} ratingChange={ratingChange} isFFA={isFFA} />
+        <ResultBanner didWin={gameData?.winningTeam === myTeam} isDraw={gameData?.winningTeam === "Draw"} ratingChange={ratingChange} isFFA={isFFA} />
 
         {isFFA ? (
           // --- FFA PERSONAL SQUAD STATS VIEW ---
