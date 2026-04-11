@@ -29,8 +29,16 @@ import EditTournament from "./pages/EditTournament"
 import ContestList from "./pages/ContestList"
 import AddContest from "./pages/AddContest"
 import Contest from "./pages/Contest"
+import AboutUs from "./pages/AboutUs"
 
 function App() {
+
+  const host = window.location.hostname;
+
+  if (host.startsWith("about.")) {
+    return <AboutUs />
+  }
+
   return (
     <UserProvider>
       <BrowserRouter>
