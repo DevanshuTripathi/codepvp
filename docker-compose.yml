@@ -30,7 +30,10 @@ services:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
-  
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
   caddy:
     image: caddy:2
     container_name: codepvp_caddy
