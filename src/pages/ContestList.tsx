@@ -35,7 +35,7 @@ const ContestList: React.FC = () => {
     const fetchContests = async () => {
       try {
         // Querying a "Contests" collection specifically for public FFA modes
-        const q = query(collection(db, "Contests"), where("visibility", "==", "Public"));
+        const q = query(collection(db, "Contests"), where("visibility", "==", "Public"), where("status", "!=", "Completed"));
         const querySnapshot = await getDocs(q);
         
         const fetchedContests: Contest[] = [];

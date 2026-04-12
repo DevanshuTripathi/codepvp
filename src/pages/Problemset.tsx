@@ -220,7 +220,7 @@ export default function Problemset() {
     };
 
     const handleExtraction = () => {
-      navigate(`/room/${roomId}/results`);
+      navigate(`/feedback/${roomId}`);
     }
 
     socket.on("solvedProblem", handleSolvedProblem);

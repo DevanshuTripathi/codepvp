@@ -30,6 +30,7 @@ import ContestList from "./pages/ContestList"
 import AddContest from "./pages/AddContest"
 import Contest from "./pages/Contest"
 import AboutUs from "./pages/AboutUs"
+import Feedback from "./pages/Feedback"
 
 function App() {
 
@@ -64,6 +65,7 @@ function App() {
             <Route path="tournaments/:tournamentId" element={<TournamentLobby />} />
             <Route path="contests" element={<ContestList />} />
             <Route path="contests/:id" element={<Contest />} />
+            <Route path="feedback/:roomId" element={<Feedback />} />
 
             {/* PROTECTED ADMIN ROUTE */}
             <Route 
