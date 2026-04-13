@@ -20,6 +20,7 @@ import TournamentList from "./pages/TournamentList"
 import TournamentLobby from "./pages/TournamentLobby"
 import './App.css'
 import { UserProvider } from "./hooks/useUser"
+import { Toaster } from "react-hot-toast"
 
 // ADMIN COMPONENTS
 import AdminRoute from "./pages/components/AdminRoute"
@@ -43,6 +44,15 @@ function App() {
   return (
     <UserProvider>
       <BrowserRouter>
+        <Toaster 
+          position="top-center" 
+          toastOptions={{
+            style: {
+              background: '#333',
+              color: '#fff',
+            },
+          }} 
+        />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />

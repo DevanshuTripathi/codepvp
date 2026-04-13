@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../firebaseConfig';
 import { updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { Upload, Check } from 'lucide-react';
 
@@ -114,6 +114,18 @@ const Onboarding = () => {
     try {
       const user = auth.currentUser;
       if (user) {
+
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('username', '==', username.trim()));
+        const querySnapshot = await getDocs(q);
+
+        const isTaken = querySnapshot.docs.some(doc => doc.id !== user.uid);
+
+        if (isTaken) {
+          toast.error('This username is already taken. Please choose another.');
+          setLoading(false);
+          return; // Stop submission
+        }
 
         let avatarUrl = selectedAvatar;
 
