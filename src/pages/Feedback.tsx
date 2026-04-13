@@ -156,7 +156,7 @@ const Feedback: React.FC = () => {
                 {/* Section 1 */}
                 <div className="bg-black/40 border border-gray-800 rounded-2xl p-6 md:p-8">
                 <h2 className="text-xl font-bold text-purple-400 mb-8 border-b border-gray-800 pb-4 flex items-center gap-2">
-                    ⚡ Section 1: Core Product Validation
+                    Section 1: Core Product Validation
                 </h2>
                 
                 <div className="space-y-8">
@@ -182,7 +182,7 @@ const Feedback: React.FC = () => {
                 {/* Section 2 */}
                 <div className="bg-black/40 border border-gray-800 rounded-2xl p-6 md:p-8">
                 <h2 className="text-xl font-bold text-green-400 mb-8 border-b border-gray-800 pb-4 flex items-center gap-2">
-                    💰 Section 2: Monetization
+                    Section 2: Monetization
                 </h2>
                 
                 <div className="space-y-8">
@@ -201,7 +201,7 @@ const Feedback: React.FC = () => {
                 <div className="bg-black/40 border border-gray-800 rounded-2xl p-6 md:p-8 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/10 blur-[50px]"></div>
                 <h2 className="text-xl font-bold text-red-400 mb-8 border-b border-gray-800 pb-4 flex items-center gap-2 relative z-10">
-                    🧨 Section 3: Truth Bomb Zone
+                    Section 3: Truth Bomb Zone
                 </h2>
                 
                 <div className="space-y-8 relative z-10">
@@ -233,7 +233,7 @@ const Feedback: React.FC = () => {
                 {/* Section 4 */}
                 <div className="bg-black/40 border border-gray-800 rounded-2xl p-6 md:p-8">
                 <h2 className="text-xl font-bold text-blue-400 mb-8 border-b border-gray-800 pb-4 flex items-center gap-2">
-                    🧠 Section 4: Behavioral Insight
+                    Section 4: Behavioral Insight
                 </h2>
                 
                 <div className="space-y-8">

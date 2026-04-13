@@ -1,6 +1,7 @@
 export function editorHandlers(io, socket) {
   socket.on("joinProblemRoom", ({ roomId, teamId, problemId, username, language }) => {
     socket.join(`${roomId}-team-${teamId}-problem-${problemId}-language-${language}`);
+    socket.join(`${roomId}-team-${teamId}`);
   });
 
   socket.on("leaveProblemRoom", ({ roomId, teamId, problemId, language }) => {

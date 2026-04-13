@@ -9,6 +9,11 @@ interface Problem {
   difficulty?: string;
 }
 
+interface Badge {
+  id: string;
+  name: string;
+}
+
 const AddContest = () => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -22,31 +27,44 @@ const AddContest = () => {
   const [joinCode, setJoinCode] = useState("");
   
   // Prize configuration
-  const [prizes, setPrizes] = useState([{ rank: "1st", reward: "" }]);
+  const [prizes, setPrizes] = useState([{ rank: "1st", reward: "", badgeId: "" }]);
 
-  // Problem Selection
+  // Problem & Badge Selection
   const [availableProblems, setAvailableProblems] = useState<Problem[]>([]);
   const [selectedProblems, setSelectedProblems] = useState<string[]>([]);
-  const [isLoadingProblems, setIsLoadingProblems] = useState(true);
+  const [availableBadges, setAvailableBadges] = useState<Badge[]>([]);
+  
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
-  // Fetch Problems on Mount
+  // Fetch Problems & Badges on Mount
   useEffect(() => {
-    const fetchProblems = async () => {
+    const fetchData = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "ProblemsWithHTC"));
-        const fetched: Problem[] = [];
-        querySnapshot.forEach((doc) => {
-          fetched.push({ id: doc.id, title: doc.data().title || "Untitled Problem", difficulty: doc.data().difficulty || "Medium" });
+        const [probSnap, badgeSnap] = await Promise.all([
+          getDocs(collection(db, "ProblemsWithHTC")),
+          getDocs(collection(db, "Badges")) // Fetching badges
+        ]);
+
+        const fetchedProbs: Problem[] = [];
+        probSnap.forEach((doc) => {
+          fetchedProbs.push({ id: doc.id, title: doc.data().title || "Untitled Problem", difficulty: doc.data().difficulty || "Medium" });
         });
-        setAvailableProblems(fetched);
+        
+        const fetchedBadges: Badge[] = [];
+        badgeSnap.forEach((doc) => {
+          fetchedBadges.push({ id: doc.id, name: doc.data().name || "Unnamed Badge" });
+        });
+
+        setAvailableProblems(fetchedProbs);
+        setAvailableBadges(fetchedBadges);
       } catch (error) {
-        console.error("Error fetching problems:", error);
+        console.error("Error fetching data:", error);
       } finally {
-        setIsLoadingProblems(false);
+        setIsLoadingData(false);
       }
     };
 
-    fetchProblems();
+    fetchData();
   }, []);
 
   const updateArrayField = (setter: any, array: any, index: number, field: string, value: string) => {
@@ -79,7 +97,8 @@ const AddContest = () => {
         visibility,
         joinCode: visibility === "Private" ? joinCode : null,
         prizes,
-        problemIds: selectedProblems, // Saving the selected problem IDs
+        problemIds: selectedProblems, 
+        badgesDistributed: false, // Initial flag to track distribution
         createdAt: new Date()
       });
       alert("FFA Arena Successfully Deployed! 💥");
@@ -90,7 +109,7 @@ const AddContest = () => {
       setJoinCode("");
       setRules("");
       setSelectedProblems([]);
-      setPrizes([{ rank: "1st", reward: "" }]);
+      setPrizes([{ rank: "1st", reward: "", badgeId: "" }]);
     } catch (err) {
       console.error(err);
       alert("Error: Check Firestore rules or database connection.");
@@ -156,7 +175,6 @@ const AddContest = () => {
                 </select>
               </div>
               
-              {/* Conditional Join Code Input */}
               {visibility === "Private" && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                   <label className="text-[16px] text-red-400 uppercase ml-1 flex items-center gap-2"><Lock size={14}/> Access Code</label>
@@ -196,7 +214,7 @@ const AddContest = () => {
         {/* Right Column: Problems & Prizes */}
         <div className="lg:col-span-5 space-y-6 flex flex-col">
           
-          {/* Problem Selector (NEW) */}
+          {/* Problem Selector */}
           <section className="bg-black/40 border border-cyan-900/30 p-6 rounded-xl backdrop-blur-sm flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-4 shrink-0">
               <div className="flex items-center gap-2 text-cyan-400 text-sm font-bold uppercase tracking-widest">
@@ -208,7 +226,7 @@ const AddContest = () => {
             </div>
             
             <div className="space-y-2 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-[200px] max-h-[300px]">
-              {isLoadingProblems ? (
+              {isLoadingData ? (
                 <div className="text-gray-500 text-sm italic text-center py-4">Fetching database...</div>
               ) : availableProblems.length === 0 ? (
                 <div className="text-gray-500 text-sm italic text-center py-4">No problems found in collection.</div>
@@ -247,22 +265,35 @@ const AddContest = () => {
             </div>
           </section>
 
-          {/* Prize Pool */}
+          {/* Prize Pool with Badges */}
           <section className="bg-black/40 border border-amber-900/20 p-6 rounded-xl backdrop-blur-sm shrink-0">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 text-amber-400 text-sm font-bold uppercase tracking-widest">
                 <Gift size={16} /> Spoils of War
               </div>
-              <button type="button" onClick={() => setPrizes([...prizes, {rank: "", reward: ""}])} className="text-[15px] text-amber-500 hover:text-amber-300 font-bold transition-colors">+ ADD PRIZE</button>
+              <button type="button" onClick={() => setPrizes([...prizes, {rank: "", reward: "", badgeId: ""}])} className="text-[15px] text-amber-500 hover:text-amber-300 font-bold transition-colors">+ ADD PRIZE</button>
             </div>
-            <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
               {prizes.map((p, i) => (
                 <div key={i} className="flex gap-2 bg-white/5 p-2 rounded border border-amber-900/20">
-                  <input className="w-1/3 bg-black/40 border border-amber-900/20 p-2 rounded text-[14px] outline-none focus:border-amber-500 text-amber-100 placeholder-amber-900/50" placeholder="Rank (1st)" value={p.rank} onChange={(e) => updateArrayField(setPrizes, prizes, i, 'rank', e.target.value)} />
-                  <input className="w-2/3 bg-black/40 border border-amber-900/20 p-2 rounded text-[14px] outline-none focus:border-amber-500 text-amber-200 placeholder-amber-900/50" placeholder="Reward (e.g. 500 XP)" value={p.reward} onChange={(e) => updateArrayField(setPrizes, prizes, i, 'reward', e.target.value)} />
+                  <input className="w-1/4 bg-black/40 border border-amber-900/20 p-2 rounded text-[14px] outline-none focus:border-amber-500 text-amber-100 placeholder-amber-900/50" placeholder="Rank (1st)" value={p.rank} onChange={(e) => updateArrayField(setPrizes, prizes, i, 'rank', e.target.value)} />
+                  <input className="w-2/4 bg-black/40 border border-amber-900/20 p-2 rounded text-[14px] outline-none focus:border-amber-500 text-amber-200 placeholder-amber-900/50" placeholder="Reward (e.g. 500 XP)" value={p.reward} onChange={(e) => updateArrayField(setPrizes, prizes, i, 'reward', e.target.value)} />
+                  
+                  {/* Badge Dropdown */}
+                  <select 
+                    className="w-1/4 bg-black/40 border border-amber-900/20 p-2 rounded text-[14px] outline-none focus:border-amber-500 text-amber-400"
+                    value={p.badgeId || ""}
+                    onChange={(e) => updateArrayField(setPrizes, prizes, i, 'badgeId', e.target.value)}
+                  >
+                    <option value="">No Badge</option>
+                    {availableBadges.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
               ))}
             </div>
+            <p className="text-[10px] text-amber-500/60 mt-3 italic">* For automation, use exact ranks like "1st", "2nd", "3rd", or "Participant".</p>
           </section>
 
           {/* Submit Action */}

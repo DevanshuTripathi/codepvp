@@ -4,7 +4,7 @@ import { db } from '../../firebaseConfig';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, arrayUnion, deleteDoc, onSnapshot, arrayRemove, serverTimestamp } from 'firebase/firestore';
 import { useUser } from '../hooks/useUser';
 import LoadingScreen from './components/LoadingScreen';
-import { Flame, Users, Key, ShieldAlert, Gift, ArrowLeft, Swords, Clock, Trophy, Trash2, Play, Square, LogOut } from 'lucide-react';
+import { Flame, Users, Key, ShieldAlert, Gift, ArrowLeft, Swords, Clock, Trophy, Trash2, Play, Square, LogOut, Award } from 'lucide-react';
 import { socket } from '../utils/socket';
 
 interface Contest {
@@ -15,7 +15,8 @@ interface Contest {
   rules: string;
   startDate: any;
   endDate: any;
-  prizes: { rank: string; reward: string }[];
+  prizes: { rank: string; reward: string; badgeId?: string }[];
+  badgesDistributed?: boolean; // Tracking distribution
 }
 
 interface Team {
@@ -63,8 +64,6 @@ const Contest: React.FC = () => {
   useEffect(() => {
     if (!id || !user) return;
 
-    // 1. Listen to Contest Details in REAL-TIME
-    // This ensures that when the admin starts the contest, everyone's "Enter Arena" button unlocks instantly.
     const unsubContest = onSnapshot(doc(db, "Contests", id), (docSnap) => {
       if (!docSnap.exists()) {
         alert("Arena not found!");
@@ -74,7 +73,6 @@ const Contest: React.FC = () => {
       setContest({ id: docSnap.id, ...docSnap.data() } as Contest);
     });
 
-    // 2. Fetch Teams & Leaderboard
     const fetchTeams = async () => {
       try {
         const teamsRef = collection(db, "Teams");
@@ -96,11 +94,7 @@ const Contest: React.FC = () => {
         });
 
         teamsData.sort((a, b) => {
-          // 1. Sort by score (Highest first)
           if (b.score !== a.score) return (b.score || 0) - (a.score || 0);
-          
-          // 2. Tie-breaker: Who extracted first? (Lowest timestamp first)
-          // If a team hasn't extracted, Infinity pushes them down in a tie.
           const aTime = a.finishedAt?.toMillis() || Infinity;
           const bTime = b.finishedAt?.toMillis() || Infinity;
           return aTime - bTime;
@@ -108,7 +102,6 @@ const Contest: React.FC = () => {
 
         setLeaderboard(teamsData);
 
-        // 3. Fetch User Details for participants
         if (uidsToFetch.size > 0) {
           const playerPromises = Array.from(uidsToFetch).map(uid => getDoc(doc(db, "users", uid)));
           const playerDocs = await Promise.all(playerPromises);
@@ -135,7 +128,7 @@ const Contest: React.FC = () => {
     fetchTeams();
 
     return () => {
-      unsubContest(); // Cleanup listener
+      unsubContest(); 
     };
   }, [id, user, navigate]);
 
@@ -145,16 +138,15 @@ const Contest: React.FC = () => {
         const teamRef = doc(db, "Teams", userTeam?.id!);
         const teamSnap = await getDoc(teamRef);
         const teamData = teamSnap.data();
-        if("finishedAt" in teamData!) {
+        if(teamData && "finishedAt" in teamData) {
           setCompleted(true);
         }
-
       } catch (err) {
         console.error("error while checking finish status", err);
       }
     }
-    checkStatus();
-  })
+    if (userTeam?.id) checkStatus();
+  }, [userTeam?.id]);
 
   const injectCurrentUserDetails = () => {
     if (user && userData && !playerDetails[user.uid]) {
@@ -241,7 +233,6 @@ const Contest: React.FC = () => {
     }
   };
 
-  // USER ACTION: Leave Team
   const handleLeaveTeam = async () => {
     if (!userTeam || !user || !id) return;
     if (!window.confirm("Are you sure you want to abandon your squad?")) return;
@@ -251,11 +242,9 @@ const Contest: React.FC = () => {
       const teamRef = doc(db, "Teams", userTeam.id);
       
       if (userTeam.members.length === 1) {
-        // If user is the last member, delete the team entirely
         await deleteDoc(teamRef);
         setLeaderboard(prev => prev.filter(t => t.id !== userTeam.id));
       } else {
-        // Otherwise, just remove the user from the members array
         await updateDoc(teamRef, {
           members: arrayRemove(user.uid)
         });
@@ -277,28 +266,24 @@ const Contest: React.FC = () => {
     }
   };
 
-  // ADMIN ACTION: Start Contest
   const handleStartContest = async () => {
-  if (!window.confirm("Are you sure you want to open the arena? All registered operatives will be allowed to enter.")) return;
-  
-  try {
-    // 1. Tell backend to start the timer (Assume a 60 min default, or pull from contest data if you add it)
-    socket.emit("startFFAContest", { 
-      contestId: id, 
-      adminName: userData?.username || "Admin", 
-      durationMinutes: 10 // Replace with your actual contest duration variable if you have one
-    });
-
-    // 2. Update Firebase (This instantly changes status to 'Ongoing' for all users)
-    await updateDoc(doc(db, "Contests", id!), { status: 'Ongoing', startDate: serverTimestamp() });
+    if (!window.confirm("Are you sure you want to open the arena? All registered operatives will be allowed to enter.")) return;
     
-  } catch (err) {
-    console.error(err);
-    alert("Failed to start arena.");
-  }
-};
+    try {
+      socket.emit("startFFAContest", { 
+        contestId: id, 
+        adminName: userData?.username || "Admin", 
+        durationMinutes: 10
+      });
 
-  // ADMIN ACTION: End Contest
+      await updateDoc(doc(db, "Contests", id!), { status: 'Ongoing', startDate: serverTimestamp() });
+      
+    } catch (err) {
+      console.error(err);
+      alert("Failed to start arena.");
+    }
+  };
+
   const handleEndContest = async () => {
     if (!window.confirm("Are you sure you want to end the bloodbath and finalize scores?")) return;
     try {
@@ -323,6 +308,63 @@ const Contest: React.FC = () => {
       alert("Failed to execute kick command.");
     }
   };
+
+  // --- AUTOMATED BADGE DISTRIBUTION LOGIC ---
+  const handleDistributeBadges = async () => {
+    if (!window.confirm("Distribute badges based on current leaderboard? This action will permanently grant the badges and cannot be undone.")) return;
+    setActionLoading(true);
+    
+    try {
+      // Loop through the leaderboard to assign based on index (0 = 1st, 1 = 2nd, etc.)
+      for (let i = 0; i < leaderboard.length; i++) {
+        const team = leaderboard[i];
+        const position = i + 1;
+
+        const earnedBadges: string[] = [];
+
+        contest?.prizes?.forEach(prize => {
+          if (!prize.badgeId) return;
+
+          const r = prize.rank.toLowerCase().trim();
+          let matches = false;
+
+          // Highly robust check against manual text inputs from AddContest
+          if (position === 1 && (r === '1st' || r === '1' || r === 'winner')) matches = true;
+          else if (position === 2 && (r === '2nd' || r === '2')) matches = true;
+          else if (position === 3 && (r === '3rd' || r === '3')) matches = true;
+          else if (position === 4 && (r === '4th' || r === '4')) matches = true;
+          else if (position === 5 && (r === '5th' || r === '5')) matches = true;
+          else if (r.includes('participant') || r.includes('all')) matches = true;
+
+          if (matches) {
+            earnedBadges.push(prize.badgeId);
+          }
+        });
+
+        // If they earned a badge, loop through every member of the team and inject it
+        if (earnedBadges.length > 0) {
+          for (const memberUid of team.members) {
+            const userRef = doc(db, "users", memberUid);
+            // using arrayUnion ensures they don't get duplicates if ran twice
+            await updateDoc(userRef, {
+              badges: arrayUnion(...earnedBadges)
+            });
+          }
+        }
+      }
+
+      // Mark the contest so it can't be triggered again
+      await updateDoc(doc(db, "Contests", id!), { badgesDistributed: true });
+      alert("🎖️ Badges distributed successfully across the arena!");
+      
+    } catch (error) {
+      console.error("Failed to distribute badges", error);
+      alert("Error distributing badges. Check console.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
 
   if (isLoading) return <LoadingScreen message="Establishing Secure Connection..." />;
   if (!contest) return null;
@@ -385,6 +427,17 @@ const Contest: React.FC = () => {
                 >
                   <Square size={18} /> Halt Arena
                 </button>
+                
+                {/* NEW BADGE DISTRIBUTION TRIGGER */}
+                {contest.status === 'Completed' && (
+                  <button
+                    onClick={handleDistributeBadges}
+                    disabled={contest.badgesDistributed || actionLoading}
+                    className="flex-1 bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white border border-amber-500/50 font-black py-3 rounded-lg uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Award size={18} /> {contest.badgesDistributed ? 'Badges Sent' : 'Issue Badges'}
+                  </button>
+                )}
               </div>
             </section>
           )}
@@ -460,7 +513,6 @@ const Contest: React.FC = () => {
                         <p className="text-lg font-mono font-black text-white">{team.score || 0}</p>
                       </div>
                       
-                      {/* ADMIN KICK BUTTON */}
                       {isAdmin && (
                         <button 
                           onClick={() => handleKickTeam(team.id, team.name)}
@@ -487,6 +539,7 @@ const Contest: React.FC = () => {
                   <div key={idx} className="bg-amber-950/20 border border-amber-500/30 p-4 rounded-lg flex flex-col justify-center items-center text-center">
                     <span className="text-amber-500 font-black text-xl mb-1">{prize.rank}</span>
                     <span className="text-amber-100/80 text-sm">{prize.reward}</span>
+                    {prize.badgeId && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded mt-2 uppercase tracking-widest border border-amber-500/30">Includes Badge</span>}
                   </div>
                 ))}
               </div>
@@ -520,7 +573,6 @@ const Contest: React.FC = () => {
                     <span>Operatives ({userTeam.members.length} / 4)</span>
                   </p>
                   
-                  {/* EXPANDED MEMBER LIST WITH AVATAR AND USERNAME */}
                   <div className="flex flex-col gap-3">
                     {userTeam.members.map((memberUid) => {
                       const player = playerDetails[memberUid];
@@ -546,10 +598,9 @@ const Contest: React.FC = () => {
                   </div>
                 </div>
 
-                {/* DYNAMIC TELEPORT BUTTON */}
                 { !completed &&
                 <button 
-                  onClick={() => navigate(`/room/${contest.id}/problemset/team/${userTeam.id}`)} // Note: You can adjust this route!
+                  onClick={() => navigate(`/room/${contest.id}/problemset/team/${userTeam.id}`)}
                   disabled={contest.status !== 'Ongoing'}
                   className={`w-full py-4 rounded-lg font-black uppercase tracking-widest transition-all flex justify-center items-center gap-2 ${
                     contest.status === 'Ongoing' 
@@ -565,7 +616,6 @@ const Contest: React.FC = () => {
                 </button>
                 }
 
-                {/* LEAVE TEAM BUTTON */}
                 <button
                   onClick={handleLeaveTeam}
                   disabled={actionLoading || contest.status === 'Ongoing'}

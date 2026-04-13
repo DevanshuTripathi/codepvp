@@ -434,6 +434,7 @@ const Problem: React.FC = () => {
 
     return () => {
       socket.off("matchEnd", handleMatchEnd);
+      socket.off("squadExtracted", handleExtraction);
     }
   }, [socket, roomId])
 
