@@ -61,6 +61,10 @@ const MultiPlayer: React.FC = () => {
       navigate(`/room/${roomId}/problemset/team/${team}`);
     });
 
+    return () => {
+      socket.off("matchFound");
+    }
+
   })
 
   const startMatchmaking = (size: '1v1' | '2v2') => {
