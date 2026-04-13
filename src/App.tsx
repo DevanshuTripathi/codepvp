@@ -32,6 +32,7 @@ import AddContest from "./pages/AddContest"
 import Contest from "./pages/Contest"
 import AboutUs from "./pages/AboutUs"
 import Feedback from "./pages/Feedback"
+import AddBadge from "./pages/AddBadge"
 
 function App() {
 
@@ -110,6 +111,15 @@ function App() {
               element={
                 <AdminRoute>
                   <AddContest />
+                </AdminRoute>
+              }
+            />
+            
+            <Route
+              path="admin/add-badge"
+              element={
+                <AdminRoute>
+                  <AddBadge />
                 </AdminRoute>
               }
             />
