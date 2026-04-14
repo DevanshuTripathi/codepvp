@@ -115,9 +115,9 @@ export async function getVerdict(sourceCode, problemId, languageId, baseUrl) {
     }
 }
 
-async function checkStatus(tokens, result, baseUrl) {
+async function checkStatus(tokens, result, targetUrl) {
     const tokenQuery = tokens.join(",");
-    const baseUrl = `${baseUrl}/submissions/batch?tokens=${tokenQuery}&base64_encoded=true&fields=*`;
+    const baseUrl = `${targetUrl}/submissions/batch?tokens=${tokenQuery}&base64_encoded=true&fields=*`;
     let ac = false;
     const options = {
     method: 'GET',
