@@ -25,11 +25,9 @@ services:
       - "5000:5000"
     environment:
       - NODE_ENV=production
-      - JUDGE=http://host.docker.internal:2358
+      - JUDGE=${VITE_JUDGE0_URL}
     env_file:
       - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ulimits:
       nofile:
         soft: 65535
