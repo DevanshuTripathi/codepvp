@@ -115,7 +115,7 @@ export function gameHandlers(io, socket) {
       // When time is up, blast the matchEnd event to everyone in the problemset
       io.to(contestId).emit("matchEnd", { reason: "time_up" });
       activeTimers.delete(contestId);
-      clearRoomSubmissions(roomId);
+      clearRoomSubmissions(contestId);
       console.log(`FFA Contest ${contestId} ended due to time limit.`);
     }, durationMinutes * 60 * 1000);
 

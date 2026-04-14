@@ -12,6 +12,7 @@ import { markTeamSolved } from './Problemset';
 import { useMatchTimer } from '../hooks/useMatchTimer';
 import ChatBox from './components/chat-box';
 import { LANGUAGES } from '../utils/languageTemplate'
+import LoadingScreen from './components/LoadingScreen';
 
 // Problem Data schema stored in firebase
 export interface ProblemData {
@@ -244,6 +245,7 @@ const Problem: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [language, setLanguage] = useState<Language>("python");
   const [roomMode, setRoomMode] = useState<'normal' | 'debug'>('normal');
+  const [isProblemLoading, setIsProblemLoading] = useState(false);
 
   const { user } = useUser();
   const currentUserName = user?.displayName || user?.email || "Anon";
@@ -352,6 +354,7 @@ const Problem: React.FC = () => {
     if (!roomId || !problemId) return;
 
     const loadProblemAndOpponents = async () => {
+      setIsProblemLoading(true);
       // 1. Fetch Problem Data
       const roomRef = doc(db, "RoomSet", roomId);
       const roomSnap = await getDoc(roomRef);
@@ -396,6 +399,7 @@ const Problem: React.FC = () => {
       } catch (err) {
         console.error("Failed to fetch opponents:", err);
       }
+      setIsProblemLoading(false);
     };
 
     loadProblemAndOpponents();
@@ -499,50 +503,52 @@ const Problem: React.FC = () => {
     }
 
     // Handles Code Submission
-const handleSubmit = async () => {
-  setIsLoading(true);
-  const sourceCode = editorRef.current?.getValue();
-  if (!sourceCode) {
-    setIsLoading(false);
-    return;
-  }
-  const normalizedCode = sourceCode.replace(/\r\n/g, "\n");
+    const handleSubmit = async () => {
+      setIsLoading(true);
+      const sourceCode = editorRef.current?.getValue();
+      if (!sourceCode) {
+        setIsLoading(false);
+        return;
+      }
+      const normalizedCode = sourceCode.replace(/\r\n/g, "\n");
 
-  try {
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/submit`, {
-      method: 'POST',
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sourceCode: normalizedCode,
-        problemId: problemId,
-        language: roomMode === 'debug' ? DEBUG_LANGUAGE : language,
-        userId: user?.uid || currentUserName, // Pass userId for better tracking
-        roomId: roomId
-      })
-    });
+      try {
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/submit`, {
+          method: 'POST',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceCode: normalizedCode,
+            problemId: problemId,
+            language: roomMode === 'debug' ? DEBUG_LANGUAGE : language,
+            userId: user?.uid || currentUserName, // Pass userId for better tracking
+            roomId: roomId
+          })
+        });
 
-    if (!response.ok) throw new Error('Submission failed');
+        if (!response.ok) throw new Error('Submission failed');
 
-    const { submissionId } = await response.json();
+        const { submissionId } = await response.json();
 
-    // --- NEW: Save to LocalStorage ---
-    const localKey = `subs_${roomId}_${problemId}_${teamId}`;
-    const existingSubs = JSON.parse(localStorage.getItem(localKey) || '[]');
-    localStorage.setItem(localKey, JSON.stringify([submissionId, ...existingSubs]));
+        // --- NEW: Save to LocalStorage ---
+        const localKey = `subs_${roomId}_${problemId}_${teamId}`;
+        const existingSubs = JSON.parse(localStorage.getItem(localKey) || '[]');
+        localStorage.setItem(localKey, JSON.stringify([submissionId, ...existingSubs]));
 
-    // Switch to submissions tab immediately to show progress
-    setActiveTab('submissions'); 
-    setIsLoading(false);
+        // Switch to submissions tab immediately to show progress
+        setActiveTab('submissions'); 
+        setIsLoading(false);
 
-  } catch (error) {
-    console.error(error);
-    setIsLoading(false);
-    alert("Failed to submit code. Please try again.");
-  }
-};
+      } catch (error) {
+        console.error(error);
+        setIsLoading(false);
+        alert("Failed to submit code. Please try again.");
+      }
+    };
 
 
-const [activeTab, setActiveTab] = useState<'problem' | 'chat' | 'submissions'>('problem');
+  const [activeTab, setActiveTab] = useState<'problem' | 'chat' | 'submissions'>('problem');
+
+  if(isProblemLoading) return <LoadingScreen message="Loading Problem" />
 
   return (
     <div className="h-screen flex flex-col bg-black overflow-hidden">

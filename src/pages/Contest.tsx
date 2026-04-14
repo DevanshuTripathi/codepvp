@@ -47,6 +47,7 @@ const Contest: React.FC = () => {
   
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
 
   // Forms state
   const [joinMode, setJoinMode] = useState<'idle' | 'create' | 'join'>('idle');
@@ -309,6 +310,14 @@ const Contest: React.FC = () => {
     }
   };
 
+  const handleDeployment = () => {
+    setIsDeploying(true);
+    const randomDelay = Math.floor(Math.random() * 2000);
+    setTimeout(() => {
+      navigate(`/room/${contest?.id}/problemset/team/${userTeam?.id}`);
+    }, randomDelay);
+  }
+
   // --- AUTOMATED BADGE DISTRIBUTION LOGIC ---
   const handleDistributeBadges = async () => {
     if (!window.confirm("Distribute badges based on current leaderboard? This action will permanently grant the badges and cannot be undone.")) return;
@@ -347,7 +356,7 @@ const Contest: React.FC = () => {
             const userRef = doc(db, "users", memberUid);
             // using arrayUnion ensures they don't get duplicates if ran twice
             await updateDoc(userRef, {
-              badges: arrayUnion(...earnedBadges)
+              earnedBadges: arrayUnion(...earnedBadges)
             });
           }
         }
@@ -355,7 +364,7 @@ const Contest: React.FC = () => {
 
       // Mark the contest so it can't be triggered again
       await updateDoc(doc(db, "Contests", id!), { badgesDistributed: true });
-      alert("🎖️ Badges distributed successfully across the arena!");
+      alert("Badges distributed successfully across the arena!");
       
     } catch (error) {
       console.error("Failed to distribute badges", error);
@@ -367,6 +376,7 @@ const Contest: React.FC = () => {
 
 
   if (isLoading) return <LoadingScreen message="Establishing Secure Connection..." />;
+  if (isDeploying) return <LoadingScreen message="Deploying" />;
   if (!contest) return null;
 
   return (
@@ -600,7 +610,7 @@ const Contest: React.FC = () => {
 
                 { !completed &&
                 <button 
-                  onClick={() => navigate(`/room/${contest.id}/problemset/team/${userTeam.id}`)}
+                  onClick={handleDeployment}
                   disabled={contest.status !== 'Ongoing'}
                   className={`w-full py-4 rounded-lg font-black uppercase tracking-widest transition-all flex justify-center items-center gap-2 ${
                     contest.status === 'Ongoing' 
