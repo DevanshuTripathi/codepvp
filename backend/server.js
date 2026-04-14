@@ -27,6 +27,8 @@ let averageProcessTimeMs = 2000;
 
 const JUDGE_NODES = [
   "http://host.docker.internal:2358",
+  process.env.JUDGE,
+  process.env.JUDGE,
   process.env.JUDGE
 ];
 
