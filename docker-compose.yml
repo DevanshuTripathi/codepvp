@@ -28,6 +28,8 @@ services:
       - JUDGE=${VITE_JUDGE0_URL}
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ulimits:
       nofile:
         soft: 65535

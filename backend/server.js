@@ -25,13 +25,27 @@ export const submissions = new Map();
 const queue = [];
 let averageProcessTimeMs = 2000;
 
+const JUDGE_NODES = [
+  "http://host.docker.internal:2358",
+  process.env.JUDGE
+];
+
+let nodeIndex = 0;
+
+function getNextJudgeNode() {
+    const node = JUDGE_NODES[currentNodeIndex];
+    currentNodeIndex = (currentNodeIndex + 1) % JUDGE_NODES.length;
+    return node;
+}
+
 async function runJudgeInBackground(id, code, problemId, languageId) {
     // 1. Get the sub object immediately
     const sub = submissions.get(id); 
     const startTime = Date.now();
+    const selectedNode = getNextJudgeNode();
     
     try {
-        const result = await getVerdict(code, problemId, languageId);
+        const result = await getVerdict(code, problemId, languageId, selectedNode);
         
         if (!result) {
             throw new Error("Judge returned no result");
@@ -45,7 +59,7 @@ async function runJudgeInBackground(id, code, problemId, languageId) {
         const currentSub = submissions.get(id); 
         submissions.set(id, { ...currentSub, status: "Completed", ...result });
     } catch (e) {
-        console.error("Judging Error:", e.message);
+        console.error(`Judging Error on ${selectedNode}:`, e.message);
         // 3. Ensure sub exists before setting Error status
         if (submissions.has(id)) {
             const currentSub = submissions.get(id);

@@ -13,7 +13,7 @@ const languageIdMap = {
 const problemsCollection = db.collection('ProblemsWithHTC');
 const debugProblemsCollection = db.collection('DebugProblems');
 
-export async function getVerdict(sourceCode, problemId, languageId) {
+export async function getVerdict(sourceCode, problemId, languageId, baseUrl) {
     const docRef = problemsCollection.doc(problemId);
     let doc = await docRef.get();
 
@@ -42,7 +42,7 @@ export async function getVerdict(sourceCode, problemId, languageId) {
     const samples = problem.samples;
     const hiddenTestCases = problem.hiddenTestCases;
 
-    const url = process.env.JUDGE + '/submissions/batch?fields=*';
+    const url = baseUrl + '/submissions/batch?fields=*';
 
     let submissions = [];
     let result = [];
@@ -109,15 +109,15 @@ export async function getVerdict(sourceCode, problemId, languageId) {
         }
         const data = await response.json();
         const tokens = data.map((d) => d.token);
-        return checkStatus(tokens, result);
+        return checkStatus(tokens, result, baseUrl);
     } catch (err) {
         console.error(err);
     }
 }
 
-async function checkStatus(tokens, result) {
+async function checkStatus(tokens, result, baseUrl) {
     const tokenQuery = tokens.join(",");
-    const baseUrl = `${process.env.JUDGE}/submissions/batch?tokens=${tokenQuery}&base64_encoded=true&fields=*`;
+    const baseUrl = `${baseUrl}/submissions/batch?tokens=${tokenQuery}&base64_encoded=true&fields=*`;
     let ac = false;
     const options = {
     method: 'GET',
