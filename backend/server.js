@@ -25,13 +25,14 @@ export const submissions = new Map();
 const queue = [];
 let averageProcessTimeMs = 2000;
 
-const JUDGE_NODES = [
+const ALL_JUDGE_NODES = [
   "http://host.docker.internal:2358",
   process.env.JUDGE,
   process.env.JUDGE,
   process.env.JUDGE
 ];
 
+let JUDGE_NODES = [...ALL_JUDGE_NODES];
 let currentNodeIndex = 0;
 
 function getNextJudgeNode() {
@@ -40,11 +41,52 @@ function getNextJudgeNode() {
     return node;
 }
 
-async function runJudgeInBackground(id, code, problemId, languageId) {
+function markNodeDead(url) {
+    if (!JUDGE_NODES.includes(url)) return; // Already marked dead
+
+    console.error(`🚨 Judge Node Offline: ${url}. Kicking it out of rotation.`);
+    
+    // Remove ALL instances of this URL from the active array
+    JUDGE_NODES = JUDGE_NODES.filter(node => node !== url);
+
+    // Start a heartbeat check to revive it
+    const reviveInterval = setInterval(async () => {
+        console.log(`Heartbeat check: Is ${url} back online?`);
+        try {
+            // Ping the Judge0 config endpoint as a health check
+            const res = await fetch(`${url}/languages`); 
+            if (res.ok) {
+                console.log(`Judge Node Revived! Adding ${url} back to rotation.`);
+                
+                // Add it back with the correct weight (e.g., 3 times for remote)
+                const originalWeight = ALL_JUDGE_NODES.filter(n => n === url).length;
+                for(let i=0; i < originalWeight; i++) JUDGE_NODES.push(url);
+                
+                clearInterval(reviveInterval); // Stop pinging
+            }
+        } catch (e) {
+            // Still dead, do nothing. Interval will run again.
+        }
+    }, 60000); // Check every 60 seconds
+}
+
+async function runJudgeInBackground(id, code, problemId, languageId, attempt = 1) {
     // 1. Get the sub object immediately
     const sub = submissions.get(id); 
-    const startTime = Date.now();
     const selectedNode = getNextJudgeNode();
+
+    // Panic Protocol: If all VMs are down
+    if (!selectedNode) {
+        if (submissions.has(id)) {
+            const currentSub = submissions.get(id);
+            submissions.set(id, { ...currentSub, status: "Error", errorMessage: "All execution servers are offline." });
+        }
+        const index = queue.indexOf(id);
+        if (index > -1) queue.splice(index, 1);
+        return;
+    }
+
+    const startTime = Date.now();
     
     try {
         const result = await getVerdict(code, problemId, languageId, selectedNode);
@@ -60,16 +102,28 @@ async function runJudgeInBackground(id, code, problemId, languageId) {
         // 2. Use the most fresh data from the Map
         const currentSub = submissions.get(id); 
         submissions.set(id, { ...currentSub, status: "Completed", ...result });
-    } catch (e) {
-        console.error(`Judging Error on ${selectedNode}:`, e.message);
-        // 3. Ensure sub exists before setting Error status
-        if (submissions.has(id)) {
-            const currentSub = submissions.get(id);
-            submissions.set(id, { ...currentSub, status: "Error", errorMessage: e.message });
-        }
-    } finally {
+
         const index = queue.indexOf(id);
         if (index > -1) queue.splice(index, 1);
+    } catch (e) {
+        console.error(`Judging Error on ${selectedNode}:`, e.message);
+
+        markNodeDead(selectedNode);
+
+        // 2. Automatically retry the submission on a healthy server
+        if (attempt < 3 && JUDGE_NODES.length > 0) {
+            console.log(`🔄 Retrying submission ${id} (Attempt ${attempt + 1})...`);
+            // Recursively call the function. Do NOT remove from queue yet!
+            return runJudgeInBackground(id, code, problemId, languageId, attempt + 1);
+        } else {
+            // 3. Give up permanently after 3 fails or if no nodes are left
+            if (submissions.has(id)) {
+                const currentSub = submissions.get(id);
+                submissions.set(id, { ...currentSub, status: "Error", errorMessage: "Execution failed after multiple network attempts." });
+            }
+            const index = queue.indexOf(id);
+            if (index > -1) queue.splice(index, 1);
+        }
     }
 }
 
