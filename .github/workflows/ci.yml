@@ -66,6 +66,9 @@ jobs:
             
             # Pull the latest code from GitHub
             git pull origin main
+
+            # exports
+            export VITE_JUDGE0_URL="${{ secrets.VITE_JUDGE0_URL }}"
             
             # Rebuild and restart the backend container without downtime
             docker compose up -d --build backend caddy
