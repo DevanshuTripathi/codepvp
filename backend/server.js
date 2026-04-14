@@ -30,7 +30,7 @@ const JUDGE_NODES = [
   process.env.JUDGE
 ];
 
-let nodeIndex = 0;
+let currentNodeIndex = 0;
 
 function getNextJudgeNode() {
     const node = JUDGE_NODES[currentNodeIndex];
