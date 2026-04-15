@@ -252,12 +252,21 @@ const Problem: React.FC = () => {
   const [code, setCode] = useState("");
   const [opponents, setOpponents] = useState<any[]>([]);
 
+  const [submitCooldown, setSubmitCooldown] = useState(0);
+
   // Generate unique localStorage key for this problem
   const storageKey = `code_${roomId}_${problemId}_${teamId}_${language}`;
 
   const navigate = useNavigate();
 
   const { timeLeft, isMatchOver } = useMatchTimer(roomId);
+
+  useEffect(() => {
+    if (submitCooldown > 0) {
+      const timer = setTimeout(() => setSubmitCooldown(prev => prev - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [submitCooldown]);
 
   	const handleLangChange = (event: any) => {
       if (roomMode === 'debug') return;
@@ -504,7 +513,9 @@ const Problem: React.FC = () => {
 
     // Handles Code Submission
     const handleSubmit = async () => {
+      if (submitCooldown > 0) return;
       setIsLoading(true);
+      setSubmitCooldown(10);
       const sourceCode = editorRef.current?.getValue();
       if (!sourceCode) {
         setIsLoading(false);
@@ -580,9 +591,9 @@ const Problem: React.FC = () => {
             onClick={handleSubmit}
             className="font-bold text-gray-900 bg-green-400 border-2 border-green-400 rounded-lg px-4 py-1.5 transition-all duration-300 hover:bg-transparent hover:text-green-300
             disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isMatchOver}
+            disabled={isMatchOver || submitCooldown > 0}
           >
-            Submit
+            {submitCooldown > 0 ? `Submit (${submitCooldown}s)` : 'Submit'}
           </button>
           <button 
             onClick={() => navigate(`/room/${roomId}/problemset/team/${teamId}`)} 

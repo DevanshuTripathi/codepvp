@@ -69,6 +69,7 @@ jobs:
 
             # exports
             export VITE_JUDGE0_URL="${{ secrets.VITE_JUDGE0_URL }}"
+            export VITE_JUDGE1_URL="${{ secrets.VITE_JUDGE1_URL }}"
             
             # Rebuild and restart the backend container without downtime
             docker compose up -d --build backend caddy

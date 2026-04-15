@@ -29,7 +29,10 @@ const ALL_JUDGE_NODES = [
   "http://host.docker.internal:2358",
   process.env.JUDGE,
   process.env.JUDGE,
-  process.env.JUDGE
+  process.env.JUDGE,
+  process.env.JUDGE1,
+  process.env.JUDGE1,
+  process.env.JUDGE1,
 ];
 
 let JUDGE_NODES = [...ALL_JUDGE_NODES];
