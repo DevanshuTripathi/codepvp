@@ -27,6 +27,7 @@ services:
       - NODE_ENV=production
       - JUDGE=${VITE_JUDGE0_URL}
       - JUDGE1=${VITE_JUDGE1_URL}
+      - JUDGE2=${VITE_JUDGE2_URL}
     env_file:
       - .env
     extra_hosts:

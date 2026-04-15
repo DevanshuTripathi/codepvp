@@ -33,6 +33,9 @@ const ALL_JUDGE_NODES = [
   process.env.JUDGE1,
   process.env.JUDGE1,
   process.env.JUDGE1,
+  process.env.JUDGE2,
+  process.env.JUDGE2,
+  process.env.JUDGE2,
 ];
 
 let JUDGE_NODES = [...ALL_JUDGE_NODES];
@@ -182,7 +185,17 @@ app.get("/api/status/:id", (req, res) => {
     if (sub.status === "Processing") {
         position = queue.indexOf(req.params.id) + 1;
 
-        estimatedWaitTimeMs = Math.round(position * averageProcessTimeMs);
+        const activeNodesCount = JUDGE_NODES.length;
+
+        if (activeNodesCount === 0) {
+             // Edge case: All nodes are dead. Set to -1 or a flag to show "Unknown" on the frontend
+            estimatedWaitTimeMs = -1; 
+        } else {
+            // Group the queue into parallel batches based on active nodes
+            // Example: If position is 4 and you have 3 nodes, it's in the 2nd batch (Math.ceil(4/3) = 2)
+            const effectiveBatch = Math.ceil(position / activeNodesCount);
+            estimatedWaitTimeMs = Math.round(effectiveBatch * averageProcessTimeMs);
+        }
     }
 
     res.json({ ...sub, queuePosition: position, estimatedWaitTime: estimatedWaitTimeMs });
