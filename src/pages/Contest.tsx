@@ -542,7 +542,7 @@ const Contest: React.FC = () => {
           {contest.prizes && contest.prizes.length > 0 && (
             <section className="bg-black/40 border border-amber-500/20 rounded-xl p-6 backdrop-blur-sm">
               <h2 className="text-amber-400 uppercase tracking-widest font-bold flex items-center gap-2 mb-4 border-b border-amber-500/20 pb-2">
-                <Gift size={18} /> Spoils of War
+                <Gift size={18} /> Prizes
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {contest.prizes.map((prize, idx) => (

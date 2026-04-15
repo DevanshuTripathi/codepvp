@@ -259,7 +259,7 @@ const Problem: React.FC = () => {
 
   const navigate = useNavigate();
 
-  const { timeLeft, isMatchOver } = useMatchTimer(roomId);
+  const { timeLeft, isMatchOver, submissionsLocked } = useMatchTimer(roomId);
 
   useEffect(() => {
     if (submitCooldown > 0) {
@@ -439,7 +439,7 @@ const Problem: React.FC = () => {
     }
 
     const handleExtraction = () => {
-      navigate(`/room/${roomId}/results`);
+      navigate(`/feedback/${roomId}`);
     }
 
     socket.on("matchEnd", handleMatchEnd);
@@ -591,9 +591,9 @@ const Problem: React.FC = () => {
             onClick={handleSubmit}
             className="font-bold text-gray-900 bg-green-400 border-2 border-green-400 rounded-lg px-4 py-1.5 transition-all duration-300 hover:bg-transparent hover:text-green-300
             disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isMatchOver || submitCooldown > 0}
+            disabled={isMatchOver || submissionsLocked || submitCooldown > 0}
           >
-            {submitCooldown > 0 ? `Submit (${submitCooldown}s)` : 'Submit'}
+            {submitCooldown > 0 ? `Submit (${submitCooldown}s)` : (submissionsLocked ? 'Locked' : 'Submit')}
           </button>
           <button 
             onClick={() => navigate(`/room/${roomId}/problemset/team/${teamId}`)} 

@@ -100,33 +100,46 @@ export function gameHandlers(io, socket) {
 
   // NEW: Dedicated FFA Contest Starter
   socket.on("startFFAContest", ({ contestId, adminName, durationMinutes }) => {
+    const GRACE_PERIOD_MS = 5 * 60 * 1000;
+    const codingDurationMs = durationMinutes * 60 * 1000;
+    const now = Date.now();
     // 1. Create a lightweight room in memory just for the timer
     rooms[contestId] = {
       owner: adminName,
       isFFA: true, // Flag to identify mode
       status: "in-progress",
       duration: durationMinutes * 60, // convert to seconds
-      startTime: Date.now(),
-      endTime: Date.now() + (durationMinutes * 60 * 1000)
+      startTime: now,
+      endTime: now + codingDurationMs,
+      graceEndTime: now + codingDurationMs + GRACE_PERIOD_MS
     };
 
     // 2. Start the Server-Side Timer
-    const timerId = setTimeout(() => {
+    const codingTimerId = setTimeout(() => {
       // When time is up, blast the matchEnd event to everyone in the problemset
+      io.to(contestId).emit("codingTimeUp", { reason: "coding_time_up" });
+      console.log(`FFA Contest ${contestId} coding phase ended. Grace period started.`);
+    }, codingDurationMs);
+
+    const totalTimerId = setTimeout(() => {
       io.to(contestId).emit("matchEnd", { reason: "time_up" });
       activeTimers.delete(contestId);
       clearRoomSubmissions(contestId);
-      console.log(`FFA Contest ${contestId} ended due to time limit.`);
-    }, durationMinutes * 60 * 1000);
+      console.log(`FFA Contest ${contestId} ended completely.`);
+    }, codingDurationMs + GRACE_PERIOD_MS);
 
-    activeTimers.set(contestId, timerId);
-    console.log(`FFA Contest ${contestId} started by ${adminName}. Timer set for ${durationMinutes} minutes.`);
+    activeTimers.set(contestId, { codingTimerId, totalTimerId });
+    console.log(`FFA Contest ${contestId} started by ${adminName}. ${durationMinutes}m coding + 5m grace.`);
   });
 
   socket.on("getMatchDetails", ({ roomId }) => {
     const room = rooms[roomId];
     if (room && room.endTime) {
-      socket.emit("matchDetails", { endTime: room.endTime });
+      socket.emit("matchDetails", { 
+        endTime: room.endTime,
+        graceEndTime: room.graceEndTime || null,
+        isFFA: room.isFFA || false
+      });
     } else {
       socket.emit("matchDetails", { endTime: null });
     }
@@ -172,7 +185,13 @@ export function gameHandlers(io, socket) {
     });
 
     if (activeTimers.has(roomId)) {
-      clearTimeout(activeTimers.get(roomId));
+      const timers = activeTimers.get(roomId);
+      if (typeof timers === 'object') {
+        clearTimeout(timers.codingTimerId);
+        clearTimeout(timers.totalTimerId);
+      } else {
+        clearTimeout(timers);
+      }
       activeTimers.delete(roomId);
     }
     clearRoomSubmissions(roomId);
