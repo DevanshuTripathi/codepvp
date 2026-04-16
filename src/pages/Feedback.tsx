@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../firebaseConfig'; // Adjust path based on your project structure
+import LoadingScreen from './components/LoadingScreen';
 
 // Type definition for our form state
 interface FeedbackForm {
@@ -32,8 +33,16 @@ const Feedback: React.FC = () => {
         q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q8: '', q9: '', q10: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const randomDelay = Math.floor(Math.random() * 2000);
+        setTimeout(() => {
+            setIsLoading(false);
+        }, randomDelay);
+    })
 
     const handleOptionChange = (questionId: keyof FeedbackForm, value: string) => {
         setFormData(prev => ({ ...prev, [questionId]: value }));
@@ -115,6 +124,8 @@ const Feedback: React.FC = () => {
         ))}
         </div>
     );
+
+    if (isLoading) return <LoadingScreen message="Loading Feedback Form" />
 
     return (
         <div className="bg-gray-900 min-h-screen w-full font-sans flex flex-col selection:bg-cyan-500/30">

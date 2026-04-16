@@ -6,6 +6,7 @@ import { useUser } from '../hooks/useUser';
 import type { ProblemData } from './Problem';
 import { updateUserRating } from '../utils/updateUserStats';
 import { Clock, Target, ShieldAlert } from 'lucide-react';
+import LoadingScreen from './components/LoadingScreen';
 
 export interface gameRes {
   tournamentId?: string;
@@ -133,6 +134,7 @@ const GameFinishPage: React.FC = () => {
   const [gameData, setGameData] = useState<gameRes | null>(null);
   const [myTeam, setMyTeam] = useState<string | null>(null);
   const [ratingChange, setRatingChange] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   // FFA Specific States
   const [isFFA, setIsFFA] = useState(false);
@@ -262,10 +264,13 @@ const GameFinishPage: React.FC = () => {
           }
         }
       }
+      setIsLoading(false);
     };
 
     fetchData();
   }, [roomId, user]);
+
+  if (isLoading) return <LoadingScreen message="Loading Results" />
 
   return (
     <div className='flex h-dvh justify-center items-center bg-gray-950 overflow-hidden py-10' >

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../../firebaseConfig";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
-import { Info, Flame, Calendar, Gift, ShieldAlert, Globe, Lock, Target, Code } from "lucide-react";
+import { Info, Flame, Calendar, Gift, ShieldAlert, Globe, Lock, Target, Code, Timer } from "lucide-react";
 
 interface Problem {
   id: string;
@@ -20,6 +20,7 @@ const AddContest = () => {
   const [status, setStatus] = useState("Upcoming");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [duration, setDuration] = useState(""); // <-- Added duration state
   const [rules, setRules] = useState("");
   
   // Visibility & Access
@@ -82,7 +83,7 @@ const AddContest = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !startDate || !endDate) return alert("Please fill in Contest Name and Dates.");
+    if (!name || !startDate || !endDate || !duration) return alert("Please fill in Contest Name, Dates, and Duration.");
     if (visibility === "Private" && !joinCode.trim()) return alert("Please provide an Access Code for private contests.");
     if (selectedProblems.length === 0) return alert("You must select at least one problem for the arena.");
     
@@ -93,6 +94,7 @@ const AddContest = () => {
         status,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
+        duration: Number(duration), // <-- Saving duration as a number
         rules,
         visibility,
         joinCode: visibility === "Private" ? joinCode : null,
@@ -108,6 +110,9 @@ const AddContest = () => {
       setDescription("");
       setJoinCode("");
       setRules("");
+      setDuration(""); // <-- Resetting duration
+      setStartDate("");
+      setEndDate("");
       setSelectedProblems([]);
       setPrizes([{ rank: "1st", reward: "", badgeId: "" }]);
     } catch (err) {
@@ -188,7 +193,8 @@ const AddContest = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* --- Modified Time Row --- */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-[16px] text-blue-400 uppercase ml-1 flex items-center gap-2"><Calendar size={14}/> Start Time</label>
                 <input type="datetime-local" className="w-full bg-gray-900 border border-blue-900/50 p-3 rounded-lg outline-none focus:border-blue-500 text-sm text-gray-300" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -197,7 +203,12 @@ const AddContest = () => {
                 <label className="text-[16px] text-blue-400 uppercase ml-1 flex items-center gap-2"><Calendar size={14}/> End Time</label>
                 <input type="datetime-local" className="w-full bg-gray-900 border border-blue-900/50 p-3 rounded-lg outline-none focus:border-blue-500 text-sm text-gray-300" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
+              <div>
+                <label className="text-[16px] text-blue-400 uppercase ml-1 flex items-center gap-2"><Timer size={14}/> Duration (Mins)</label>
+                <input type="number" min="1" className="w-full bg-gray-900 border border-blue-900/50 p-3 rounded-lg outline-none focus:border-blue-500 text-sm text-gray-300 placeholder-blue-900/50" placeholder="e.g. 30" value={duration} onChange={(e) => setDuration(e.target.value)} />
+              </div>
             </div>
+            {/* ----------------------- */}
 
             <div>
               <label className="text-[16px] text-orange-400 uppercase ml-1">Briefing (Description)</label>
@@ -269,7 +280,7 @@ const AddContest = () => {
           <section className="bg-black/40 border border-amber-900/20 p-6 rounded-xl backdrop-blur-sm shrink-0">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 text-amber-400 text-sm font-bold uppercase tracking-widest">
-                <Gift size={16} /> Spoils of War
+                <Gift size={16} /> Prizes
               </div>
               <button type="button" onClick={() => setPrizes([...prizes, {rank: "", reward: "", badgeId: ""}])} className="text-[15px] text-amber-500 hover:text-amber-300 font-bold transition-colors">+ ADD PRIZE</button>
             </div>

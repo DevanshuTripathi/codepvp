@@ -17,6 +17,7 @@ interface Contest {
   endDate: any;
   prizes: { rank: string; reward: string; badgeId?: string }[];
   badgesDistributed?: boolean; // Tracking distribution
+  duration: number;
 }
 
 interface Team {
@@ -274,7 +275,7 @@ const Contest: React.FC = () => {
       socket.emit("startFFAContest", { 
         contestId: id, 
         adminName: userData?.username || "Admin", 
-        durationMinutes: 10
+        durationMinutes: contest?.duration
       });
 
       await updateDoc(doc(db, "Contests", id!), { status: 'Ongoing', startDate: serverTimestamp() });
