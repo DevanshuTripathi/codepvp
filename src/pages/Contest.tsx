@@ -468,6 +468,7 @@ const Contest: React.FC = () => {
           </section>
 
           {/* LEADERBOARD / ENROLLED SQUADS SECTION */}
+          { isAdmin && (
           <section className="bg-black/40 border border-purple-500/20 rounded-xl p-6 backdrop-blur-sm">
             <div className="flex justify-between items-center mb-4 border-b border-purple-500/20 pb-2">
               <h2 className="text-purple-400 uppercase tracking-widest font-bold flex items-center gap-2">
@@ -539,6 +540,7 @@ const Contest: React.FC = () => {
               </div>
             )}
           </section>
+          )}
 
           {contest.prizes && contest.prizes.length > 0 && (
             <section className="bg-black/40 border border-amber-500/20 rounded-xl p-6 backdrop-blur-sm">
