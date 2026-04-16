@@ -3,7 +3,7 @@ import Editor from '@monaco-editor/react'
 import { editor } from 'monaco-editor'
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../../firebaseConfig';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, increment } from 'firebase/firestore';
 import { socket } from '../utils/socket';
 import { useUser } from '../hooks/useUser';
 import { debounce } from 'lodash';
@@ -308,6 +308,9 @@ const Problem: React.FC = () => {
     const enterFullscreen = async () => {
       if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen();
+        if (!localStorage.getItem(`${roomId}-${teamId}`)) {
+          localStorage.setItem(`${roomId}-${teamId}`, "not warned");
+        }
       }
     };
 
@@ -317,7 +320,15 @@ const Problem: React.FC = () => {
   useEffect(() => {
       const handleFullscreenChange = () => {
         if (!document.fullscreenElement) {
-          alert("You exited fullscreen. Match will end.");
+          if (localStorage.getItem(`${roomId}-${teamId}`) === "not warned") {
+            localStorage.setItem(`${roomId}-${teamId}`, "warned");
+            alert("You exited fullscreen. This is your First and Last Warning.");
+            navigate(`/room/${roomId}/problemset/team/${teamId}`)
+          } else {
+            applyPenalty();
+            alert("You exited fullscreen after a warning. Insuring a penalty.");
+            navigate(`/room/${roomId}/problemset/team/${teamId}`)
+          }
         }
       };
 
@@ -326,14 +337,22 @@ const Problem: React.FC = () => {
       return () => {
         document.removeEventListener("fullscreenchange", handleFullscreenChange);
       };
-    }, [roomId, teamId]);
+    }, [roomId, teamId, currentUserName]);
 
 
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        alert("You switched tabs. Match will end.");
-      }
+          if (localStorage.getItem(`${roomId}-${teamId}`) === "not warned") {
+            localStorage.setItem(`${roomId}-${teamId}`, "warned");
+            alert("You switched tabs. This is your First and Last Warning.");
+            navigate(`/room/${roomId}/problemset/team/${teamId}`)
+          } else {
+            applyPenalty();
+            alert("You switched tabs after a warning. Insuring a penalty.");
+            navigate(`/room/${roomId}/problemset/team/${teamId}`)
+          }
+        }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -341,7 +360,7 @@ const Problem: React.FC = () => {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [roomId, teamId]);
+  }, [roomId, teamId, currentUserName]);
 
   useEffect(() => {
     const preventContextMenu = (e: MouseEvent) => e.preventDefault();
@@ -356,7 +375,52 @@ const Problem: React.FC = () => {
     };
   }, []);
 
+  const applyPenalty = async () => {
+    if (!roomId || !teamId || !currentUserName) return;
 
+    try {
+      const roomRef = doc(db, "RoomSet", roomId);
+      const roomSnap = await getDoc(roomRef);
+
+      if (roomSnap.exists()) {
+        // --- 1v1 MODE LOGIC ---
+        const roomData = roomSnap.data();
+        // Assuming teamId is 'A' or 'B'. Adjust if your teamId is the full string 'teamA'/'teamB'
+        const teamKey = teamId === 'A' ? 'teamA' : (teamId === 'B' ? 'teamB' : teamId); 
+        
+        const players = roomData[teamKey]?.players || [];
+        const playerIndex = players.findIndex((p: any) => p.pid === currentUserName);
+
+        if (playerIndex !== -1) {
+          // Deduct 10 from the specific player
+          players[playerIndex].points -= 10;
+          
+          // Update both the team score and the player array in Firestore
+          await updateDoc(roomRef, {
+            [`${teamKey}.score`]: increment(-10),
+            [`${teamKey}.players`]: players
+          });
+          
+          console.log(`Penalty applied! -10 points to ${currentUserName} and ${teamKey}`);
+        }
+
+      } else {
+        // --- FFA MODE LOGIC ---
+        const teamRef = doc(db, "Teams", teamId);
+        const teamSnap = await getDoc(teamRef);
+        
+        if (teamSnap.exists()) {
+          await updateDoc(teamRef, {
+            score: increment(-10)
+          });
+
+          console.log(`FFA Penalty applied! -10 points to team ${teamId}`);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to apply penalty:", err);
+    }
+  }
 
   // Fetch problem data & opponents (MODE-AWARE)
   useEffect(() => {
