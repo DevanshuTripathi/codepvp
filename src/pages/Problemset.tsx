@@ -1,5 +1,5 @@
 import { db } from "../../firebaseConfig";
-import { getDoc, doc, updateDoc, collection, query, where, getDocs, arrayUnion } from "firebase/firestore";
+import { getDoc, doc, updateDoc, collection, query, where, getDocs, arrayUnion, increment } from "firebase/firestore";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { socket } from "../utils/socket";
@@ -108,7 +108,10 @@ export default function Problemset() {
   const { timeLeft, isMatchOver } = useMatchTimer(roomId);
   const { user, loading } = useUser();
 
+  const currentUserName = user?.displayName || user?.email || "Anon";
+
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
   const [showMatching, setShowMatching] = useState(() => {
     // Check if they've already seen it for this specific room
     return sessionStorage.getItem(`has_seen_matching_${roomId}`) !== 'true';
@@ -263,6 +266,139 @@ export default function Problemset() {
 
   const currentUserTeamFinished = teamId === 'A' ? teamAFinished : teamBFinished;
 
+  const handleResume = async () => {
+    if (document.documentElement.requestFullscreen) {
+      try {
+        await document.documentElement.requestFullscreen();
+        // Only unpause if fullscreen was successfully entered
+        setIsPaused(false); 
+      } catch (err) {
+        console.error("Error attempting to enable fullscreen:", err);
+        alert("You must allow fullscreen to continue.");
+      }
+    }
+  };
+
+  // Lock Screen
+    useEffect(() => {
+      // Wait until data is loaded and matching is done before enforcing fullscreen
+      if (!isLoadingData && !showMatching) {
+        if (!document.fullscreenElement) {
+          // Instantly pause if they aren't in fullscreen when the arena reveals itself
+          setIsPaused(true);
+          
+          // Initialize warning state if it's their first time here
+          if (!localStorage.getItem(`${roomId}-${teamId}`)) {
+            localStorage.setItem(`${roomId}-${teamId}`, "not warned");
+          }
+        }
+      }
+    }, [isLoadingData, showMatching, roomId, teamId]);
+  
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+          if (!document.fullscreenElement) {
+            setIsPaused(true);
+
+            if (localStorage.getItem(`${roomId}-${teamId}`) === "not warned") {
+              localStorage.setItem(`${roomId}-${teamId}`, "warned");
+              alert("You exited fullscreen. This is your First and Last Warning.");
+            } else {
+              applyPenalty();
+              alert("You exited fullscreen after a warning. Insuring a penalty.");
+            }
+          }
+        };
+  
+        document.addEventListener("fullscreenchange", handleFullscreenChange);
+  
+        return () => {
+          document.removeEventListener("fullscreenchange", handleFullscreenChange);
+        };
+      }, [roomId, teamId, currentUserName]);
+  
+  
+    useEffect(() => {
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+            if (localStorage.getItem(`${roomId}-${teamId}`) === "not warned") {
+              localStorage.setItem(`${roomId}-${teamId}`, "warned");
+              alert("You switched tabs. This is your First and Last Warning.");
+              navigate(`/room/${roomId}/problemset/team/${teamId}`)
+            } else {
+              applyPenalty();
+              alert("You switched tabs after a warning. Insuring a penalty.");
+              navigate(`/room/${roomId}/problemset/team/${teamId}`)
+            }
+          }
+      };
+  
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+  
+      return () => {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
+    }, [roomId, teamId, currentUserName]);
+  
+    useEffect(() => {
+      const preventContextMenu = (e: MouseEvent) => e.preventDefault();
+      const preventCopy = (e: ClipboardEvent) => e.preventDefault();
+  
+      document.addEventListener("contextmenu", preventContextMenu);
+      document.addEventListener("copy", preventCopy);
+  
+      return () => {
+        document.removeEventListener("contextmenu", preventContextMenu);
+        document.removeEventListener("copy", preventCopy);
+      };
+    }, []);
+  
+    const applyPenalty = async () => {
+      if (!roomId || !teamId || !currentUserName) return;
+  
+      try {
+        const roomRef = doc(db, "RoomSet", roomId);
+        const roomSnap = await getDoc(roomRef);
+  
+        if (roomSnap.exists()) {
+          // --- 1v1 MODE LOGIC ---
+          const roomData = roomSnap.data();
+          // Assuming teamId is 'A' or 'B'. Adjust if your teamId is the full string 'teamA'/'teamB'
+          const teamKey = teamId === 'A' ? 'teamA' : (teamId === 'B' ? 'teamB' : teamId); 
+          
+          const players = roomData[teamKey]?.players || [];
+          const playerIndex = players.findIndex((p: any) => p.pid === currentUserName);
+  
+          if (playerIndex !== -1) {
+            // Deduct 10 from the specific player
+            players[playerIndex].points -= 10;
+            
+            // Update both the team score and the player array in Firestore
+            await updateDoc(roomRef, {
+              [`${teamKey}.score`]: increment(-10),
+              [`${teamKey}.players`]: players
+            });
+            
+            console.log(`Penalty applied! -10 points to ${currentUserName} and ${teamKey}`);
+          }
+  
+        } else {
+          // --- FFA MODE LOGIC ---
+          const teamRef = doc(db, "Teams", teamId);
+          const teamSnap = await getDoc(teamRef);
+          
+          if (teamSnap.exists()) {
+            await updateDoc(teamRef, {
+              score: increment(-10)
+            });
+  
+            console.log(`FFA Penalty applied! -10 points to team ${teamId}`);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to apply penalty:", err);
+      }
+    }
 
   if (isLoadingData) {
     return <LoadingScreen message="Loading Arena" />; 
@@ -279,6 +415,25 @@ export default function Problemset() {
           sessionStorage.setItem(`has_seen_matching_${roomId}`, 'true');
         }} 
       />
+    );
+  }
+
+  if (isPaused) {
+    return (
+      <div className="flex flex-col justify-center items-center bg-gray-900 h-dvh w-dvw fixed inset-0 z-[100]">
+        <div className="p-8 bg-black/50 border border-cyan-500/50 rounded-xl text-center backdrop-blur-md shadow-2xl shadow-cyan-500/10">
+          <h2 className="text-3xl font-bold text-cyan-400 mb-4">Fullscreen Required</h2>
+          <p className="text-gray-300 mb-8 max-w-md">
+            This match requires you to be in fullscreen mode. Please enter fullscreen to access the problem set.
+          </p>
+          <button
+            onClick={handleResume}
+            className="font-bold text-gray-900 bg-cyan-400 border-2 border-cyan-400 rounded-lg px-8 py-3 text-xl transition-all duration-300 transform hover:scale-105 hover:bg-transparent hover:text-cyan-300 hover:shadow-[0_0_20px_rgba(34,211,238,0.5)]"
+          >
+            Enter Fullscreen
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -312,11 +467,21 @@ export default function Problemset() {
             )}
           </div>
 
-          <div className="text-right">
-            <p className="text-purple-300 text-lg">Time Remaining</p>
-            <p className="text-white text-3xl font-bold font-mono">
-              {timeLeft}
-            </p>
+          <div className="flex flex-col items-end gap-3 text-right">
+            {/* EXIT GAME BUTTON */}
+            <button
+              onClick={() => navigate("/")}
+              className="font-bold text-red-400 border border-red-400/50 rounded-lg px-4 py-1.5 text-sm transition-all hover:bg-red-500/20 hover:text-red-300 shadow-[0_0_10px_rgba(248,113,113,0.1)]"
+            >
+              Exit the game
+            </button>
+            
+            <div>
+              <p className="text-purple-300 text-lg">Time Remaining</p>
+              <p className="text-white text-3xl font-bold font-mono">
+                {timeLeft}
+              </p>
+            </div>
           </div>
         </div>
 
