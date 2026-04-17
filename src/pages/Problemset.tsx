@@ -254,8 +254,6 @@ export default function Problemset() {
 
   const handleFinishGame = async () => {
     if (isFFA && teamId) {
-      if (!window.confirm("Are you sure you want to extract? You won't be able to solve more problems, but your completion time will be locked in for tie-breakers.")) return;
-      
       socket.emit("extractSquad", {roomId, teamId});
     }
 
