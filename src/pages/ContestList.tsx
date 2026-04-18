@@ -21,7 +21,7 @@ const ContestList: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [joinCode, setJoinCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
-  
+
   const navigate = useNavigate();
   const { user, loading: userLoading } = useUser();
 
@@ -37,12 +37,12 @@ const ContestList: React.FC = () => {
         // Querying a "Contests" collection specifically for public FFA modes
         const q = query(collection(db, "Contests"), where("visibility", "==", "Public"), where("status", "!=", "Completed"));
         const querySnapshot = await getDocs(q);
-        
+
         const fetchedContests: Contest[] = [];
         querySnapshot.forEach((doc) => {
           fetchedContests.push({ id: doc.id, ...doc.data() } as Contest);
         });
-        
+
         setContests(fetchedContests);
       } catch (err) {
         console.error("Error fetching contests:", err);
@@ -78,7 +78,7 @@ const ContestList: React.FC = () => {
 
       // Grab the first match
       const contestId = querySnapshot.docs[0].id;
-      
+
       await new Promise(resolve => setTimeout(resolve, 800));
       navigate(`/contests/${contestId}`);
 
@@ -105,7 +105,7 @@ const ContestList: React.FC = () => {
         bg-black/40 backdrop-blur-md 
         border border-orange-500/20 rounded-xl
         shadow-2xl shadow-orange-500/10 flex-shrink-0">
-        
+
         {/* Header */}
         <div className="w-full flex justify-between items-center mb-8 shrink-0">
           <div className="flex items-center gap-4">
@@ -114,7 +114,7 @@ const ContestList: React.FC = () => {
               FFA Contests
             </h2>
           </div>
-          <button 
+          <button
             onClick={() => navigate('/')}
             className="text-red-400 hover:text-white transition-colors duration-300 text-lg flex items-center gap-2"
           >
@@ -125,20 +125,20 @@ const ContestList: React.FC = () => {
 
         {/* Main Content Area - Scrollable */}
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar flex flex-col gap-6">
-          
+
           {/* Public Contests List */}
           <div className="flex flex-col gap-4">
             <h3 className="text-xl text-orange-500 mb-2 uppercase tracking-widest font-bold flex items-center gap-2">
               <Target size={20} /> Active Drop Zones
             </h3>
-            
+
             {contests.length === 0 ? (
               <div className="text-center py-8 text-gray-500 italic border border-gray-800 rounded-lg bg-black/20">
                 No active free-for-all contests right now. Check back later.
               </div>
             ) : (
               contests.map((contest) => (
-                <div 
+                <div
                   key={contest.id}
                   className="flex flex-col md:flex-row justify-between items-start md:items-center bg-gray-900/60 border border-orange-500/20 rounded-lg p-5 transition-all duration-300 hover:bg-orange-950/40 hover:border-orange-500/60 hover:shadow-[0_0_15px_rgba(249,115,22,0.2)] group cursor-pointer"
                   onClick={() => handleJoinPublic(contest.id)}
@@ -148,11 +148,10 @@ const ContestList: React.FC = () => {
                       <h4 className="text-xl text-white font-bold tracking-wider group-hover:text-orange-400 transition-colors">
                         {contest.name}
                       </h4>
-                      <span className={`px-2 py-0.5 text-xs font-bold uppercase rounded-sm ${
-                        contest.status === 'Ongoing' ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse' : 
-                        contest.status === 'Completed' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/50' : 
-                        'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-                      }`}>
+                      <span className={`px-2 py-0.5 text-xs font-bold uppercase rounded-sm ${contest.status === 'Ongoing' ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse' :
+                          contest.status === 'Completed' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/50' :
+                            'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                        }`}>
                         {contest.status}
                       </span>
                     </div>
@@ -181,17 +180,17 @@ const ContestList: React.FC = () => {
             <h3 className="text-lg text-red-400 font-semibold flex items-center gap-2">
               <Lock size={18} /> Enter Private Match
             </h3>
-            
+
             <div className="flex flex-col md:flex-row gap-3">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
-                className="flex-1 bg-gray-950/80 border-2 border-gray-800 rounded-lg px-4 py-3 text-white text-center md:text-left text-xl tracking-[.2em] uppercase
+                className="flex-1 bg-gray-950/80 border-2 border-gray-800 rounded-lg px-4 py-3 text-white text-center md:text-left text-xl tracking-[.2em]
                 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all duration-300 placeholder-gray-700"
                 placeholder="ENTER ACCESS CODE"
               />
-              <button 
+              <button
                 onClick={handleJoinPrivate}
                 className="font-black text-black bg-red-500 border-2 border-red-500 rounded-lg py-3 px-8 text-lg uppercase tracking-wider
                 transition-all duration-300 

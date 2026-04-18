@@ -21,7 +21,7 @@ const TournamentList: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [joinCode, setJoinCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
-  
+
   const navigate = useNavigate();
   const { user, loading: userLoading } = useUser();
 
@@ -37,12 +37,12 @@ const TournamentList: React.FC = () => {
         // Only fetch public tournaments for the list
         const q = query(collection(db, "Tournaments"), where("visibility", "==", "Public"));
         const querySnapshot = await getDocs(q);
-        
+
         const fetchedTournaments: Tournament[] = [];
         querySnapshot.forEach((doc) => {
           fetchedTournaments.push({ id: doc.id, ...doc.data() } as Tournament);
         });
-        
+
         setTournaments(fetchedTournaments);
       } catch (err) {
         console.error("Error fetching tournaments:", err);
@@ -79,7 +79,7 @@ const TournamentList: React.FC = () => {
 
       // Assuming codes are unique, grab the first match
       const tournamentId = querySnapshot.docs[0].id;
-      
+
       await new Promise(resolve => setTimeout(resolve, 800));
       navigate(`/tournaments/${tournamentId}`);
 
@@ -106,7 +106,7 @@ const TournamentList: React.FC = () => {
         bg-black/30 backdrop-blur-md 
         border border-cyan-400/20 rounded-xl
         shadow-2xl shadow-cyan-500/10 flex-shrink-0">
-        
+
         {/* Header */}
         <div className="w-full flex justify-between items-center mb-8 shrink-0">
           <div className="flex items-center gap-4">
@@ -115,7 +115,7 @@ const TournamentList: React.FC = () => {
               Tournaments
             </h2>
           </div>
-          <button 
+          <button
             onClick={() => navigate('/')}
             className="text-purple-300 hover:text-white transition-colors duration-300 text-lg flex items-center gap-2"
           >
@@ -126,20 +126,20 @@ const TournamentList: React.FC = () => {
 
         {/* Main Content Area - Scrollable */}
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar flex flex-col gap-6">
-          
+
           {/* Public Tournaments List */}
           <div className="flex flex-col gap-4">
             <h3 className="text-xl text-cyan-400 mb-2 uppercase tracking-widest font-bold flex items-center gap-2">
               <Swords size={20} /> Active Arenas
             </h3>
-            
+
             {tournaments.length === 0 ? (
               <div className="text-center py-8 text-gray-500 italic border border-gray-800 rounded-lg bg-black/20">
                 No public tournaments available right now.
               </div>
             ) : (
               tournaments.map((tourney) => (
-                <div 
+                <div
                   key={tourney.id}
                   className="flex flex-col md:flex-row justify-between items-start md:items-center bg-gray-800/60 border border-cyan-400/20 rounded-lg p-5 transition-all duration-300 hover:bg-cyan-900/40 hover:border-cyan-400/60 hover:shadow-[0_0_15px_rgba(34,211,238,0.2)] group cursor-pointer"
                   onClick={() => handleJoinPublic(tourney.id)}
@@ -149,11 +149,10 @@ const TournamentList: React.FC = () => {
                       <h4 className="text-xl text-white font-bold tracking-wider group-hover:text-cyan-300 transition-colors">
                         {tourney.name}
                       </h4>
-                      <span className={`px-2 py-0.5 text-xs font-bold uppercase rounded-sm ${
-                        tourney.status === 'Ongoing' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 
-                        tourney.status === 'Completed' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/50' : 
-                        'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-                      }`}>
+                      <span className={`px-2 py-0.5 text-xs font-bold uppercase rounded-sm ${tourney.status === 'Ongoing' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' :
+                        tourney.status === 'Completed' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/50' :
+                          'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                        }`}>
                         {tourney.status}
                       </span>
                     </div>
@@ -182,17 +181,17 @@ const TournamentList: React.FC = () => {
             <h3 className="text-lg text-purple-300 font-semibold flex items-center gap-2">
               <Lock size={18} /> Join Private Tournament
             </h3>
-            
+
             <div className="flex flex-col md:flex-row gap-3">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
-                className="flex-1 bg-gray-900/80 border-2 border-gray-700/50 rounded-lg px-4 py-3 text-white text-center md:text-left text-xl tracking-[.2em] uppercase
+                className="flex-1 bg-gray-900/80 border-2 border-gray-700/50 rounded-lg px-4 py-3 text-white text-center md:text-left text-xl tracking-[.2em]
                 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400 transition-all duration-300"
                 placeholder="ENTER SECRET CODE"
               />
-              <button 
+              <button
                 onClick={handleJoinPrivate}
                 className="font-bold text-gray-900 bg-purple-400 border-2 border-purple-400 rounded-lg py-3 px-8 text-lg uppercase tracking-wider
                 transition-all duration-300 
