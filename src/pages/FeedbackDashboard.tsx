@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { db } from "../../firebaseConfig"; // Adjust path as needed
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { Activity, Users, Target, Crosshair, AlertTriangle, Code, PieChart as PieChartIcon } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+// Removed 'Cell' from imports
+import { PieChart, Pie, Tooltip, ResponsiveContainer } from "recharts";
 
-// Mapping your exact Firestore keys
 const MCQ_QUESTIONS = [
   "How likely are you to use CodePvP regularly?",
   "What would you MOST likely use CodePvP for?",
@@ -25,7 +25,8 @@ const COLORS = ['#06b6d4', '#f97316', '#10b981', '#8b5cf6', '#ef4444', '#facc15'
 
 const AdminDashboard = () => {
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
-  const [chartData, setChartData] = useState<Record<string, {name: string, value: number}[]>>({});
+  // Updated state type to include 'fill'
+  const [chartData, setChartData] = useState<Record<string, {name: string, value: number, fill: string}[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -35,29 +36,34 @@ const AdminDashboard = () => {
         const snap = await getDocs(q);
         
         const fetchedData: any[] = [];
-        // Temporary store for counting chart data: { "Question": { "Answer 1": 5, "Answer 2": 2 } }
         const aggregations: Record<string, Record<string, number>> = {};
         
-        // Initialize aggregation objects for all MCQs
         MCQ_QUESTIONS.forEach(q => aggregations[q] = {});
 
         snap.forEach((doc) => {
           const data = doc.data();
           fetchedData.push({ id: doc.id, ...data });
 
-          // Count answers for MCQs
           MCQ_QUESTIONS.forEach(question => {
             const answer = data[question] || "Unanswered";
             aggregations[question][answer] = (aggregations[question][answer] || 0) + 1;
           });
         });
 
-        // Format data for Recharts: {name: string, value: number}[]
-        const formattedChartData: Record<string, {name: string, value: number}[]> = {};
+        // Format data for Recharts, sort it, and assign colors
+        const formattedChartData: Record<string, {name: string, value: number, fill: string}[]> = {};
         MCQ_QUESTIONS.forEach(question => {
-          formattedChartData[question] = Object.keys(aggregations[question]).map(key => ({
+          const rawData = Object.keys(aggregations[question]).map(key => ({
             name: key,
             value: aggregations[question][key]
+          }));
+
+          // Sort data descending BEFORE assigning colors so the legend and pie chart match perfectly
+          rawData.sort((a, b) => b.value - a.value);
+
+          formattedChartData[question] = rawData.map((item, index) => ({
+            ...item,
+            fill: COLORS[index % COLORS.length] // Recharts automatically reads the 'fill' key
           }));
         });
 
@@ -85,8 +91,8 @@ const AdminDashboard = () => {
     return null;
   };
 
-  // Reusable component for the 8 Pie Charts
-  const PieChartCard = ({ question, data }: { question: string, data: {name: string, value: number}[] }) => (
+  // Updated props interface to expect 'fill'
+  const PieChartCard = ({ question, data }: { question: string, data: {name: string, value: number, fill: string}[] }) => (
     <div className="bg-black/40 border border-gray-800 p-5 rounded-2xl flex flex-col">
       <div className="flex items-start gap-2 mb-4 text-cyan-400 text-xs font-bold uppercase tracking-widest min-h-[40px]">
         <PieChartIcon size={16} className="shrink-0 mt-0.5" /> 
@@ -104,20 +110,18 @@ const AdminDashboard = () => {
               paddingAngle={2}
               dataKey="value"
               stroke="none"
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
+              // No <Cell> mapping needed here anymore! 
+            />
             <Tooltip content={<CustomTooltip />} />
           </PieChart>
         </ResponsiveContainer>
       </div>
       <div className="mt-4 space-y-2 overflow-y-auto flex-1 custom-scrollbar pr-2">
-        {data.sort((a,b) => b.value - a.value).map((entry, index) => (
+        {/* Data is already sorted, just map it and use entry.fill */}
+        {data.map((entry, index) => (
           <div key={index} className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 truncate pr-2">
-              <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+              <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: entry.fill }}></div>
               <span className="text-gray-400 truncate">{entry.name}</span>
             </div>
             <span className="text-white font-mono">{entry.value}</span>
@@ -187,7 +191,6 @@ const AdminDashboard = () => {
                   const dislike = fb[DESCRIPTIVE_QUESTIONS.dislike];
                   const confused = fb[DESCRIPTIVE_QUESTIONS.confused];
                   
-                  // Only show cards that actually have text feedback
                   if (!dislike && !confused) return null;
 
                   return (

@@ -35,7 +35,7 @@ import Contest from "./pages/Contest"
 import AboutUs from "./pages/AboutUs"
 import Feedback from "./pages/Feedback"
 import AddBadge from "./pages/AddBadge"
-import AdminDashboard from "./pages/FeedBackDashboard"
+import AdminDashboard from "./pages/FeedbackDashboard"
 
 function App() {
 
