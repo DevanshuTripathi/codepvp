@@ -235,6 +235,26 @@ const SubmissionsView: React.FC<{ roomId: string, problemId: string, teamId: str
   );
 };
 
+const ToggleSwitch = ({ enabled, setEnabled, label }: { enabled: boolean, setEnabled: (v: boolean) => void, label: string }) => (
+  <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-900/40 rounded-lg border border-gray-800 hover:border-cyan-500/50 transition-all group shadow-inner">
+    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 group-hover:text-cyan-400 transition-colors">
+      {label}
+    </span>
+    <button
+      onClick={() => setEnabled(!enabled)}
+      className={`relative w-10 h-5 rounded-full transition-all duration-300 focus:outline-none ${
+        enabled ? 'bg-cyan-500/20 ring-1 ring-cyan-500/50 shadow-[0_0_15px_rgba(34,211,238,0.15)]' : 'bg-gray-800 ring-1 ring-gray-700'
+      }`}
+    >
+      <div
+        className={`absolute top-1 left-1 w-3 h-3 rounded-full transition-all duration-300 transform ${
+          enabled ? 'translate-x-5 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'translate-x-0 bg-gray-500'
+        }`}
+      />
+    </button>
+  </div>
+);
+
 const Problem: React.FC = () => {
 
   const { problemId } = useParams<{ problemId: string }>();
@@ -250,6 +270,15 @@ const Problem: React.FC = () => {
   const { user } = useUser();
   const currentUserName = user?.displayName || user?.email || "Anon";
   const [code, setCode] = useState("");
+  const [isLiveEnabled, setIsLiveEnabled] = useState(() => {
+    const saved = localStorage.getItem('isLiveEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('isLiveEnabled', JSON.stringify(isLiveEnabled));
+  }, [isLiveEnabled]);
+
   const [opponents, setOpponents] = useState<any[]>([]);
 
   const [submitCooldown, setSubmitCooldown] = useState(0);
@@ -300,7 +329,9 @@ const Problem: React.FC = () => {
    // Save to localStorage for persistence on refresh
    localStorage.setItem(storageKey, codeValue);
    isLocalChange.current = true;
-   sendChange(codeValue);
+   if (isLiveEnabled) {
+    sendChange(codeValue);
+   }
   }
 
   // Lock Screen
@@ -520,6 +551,7 @@ const Problem: React.FC = () => {
     if (!socket) return;
 
     const handleRemoteChange = (data: { code: string; source: string }) => {
+      if (!isLiveEnabled) return; // Ignore remote changes if collaboration is disabled
       if (data.source === currentUserName) return;
       if (isLocalChange.current) return; // Don't overwrite local typing
 
@@ -539,7 +571,7 @@ const Problem: React.FC = () => {
     return () => {
       socket.off("editorUpdate", handleRemoteChange);
     };
-  }, [socket, currentUserName, storageKey]);
+  }, [socket, currentUserName, storageKey, isLiveEnabled]);
 
   // Flush debounce on unmount to avoid losing unsent changes
   useEffect(() => {
@@ -757,24 +789,27 @@ const Problem: React.FC = () => {
 
     {/* Right Panel - Editor and Results */}
     <div className="flex-1 flex flex-col">
-     {/* Language Select and Editor */}
-     <div className="flex-1 min-h-0">
-      {roomMode !== 'debug' && (
-       <select 
-        className="bg-gray-800 text-gray-300 p-1.5 rounded border border-gray-700 m-2" 
-        value={language} 
-        onChange={handleLangChange}
-       >
-        <option value="python">Python</option>
-        <option value="cpp">C++</option>
-        <option value="java">Java</option>
-        <option value="javascript">JavaScript</option>
-        <option value="typescript">TypeScript</option>
-        <option value="go">Golang</option>
-        <option value="rust">Rust</option>
-       </select>
-      )}
-      <div className={roomMode === 'debug' ? 'h-full' : 'h-[calc(100%-48px)]'}>
+      {/* Language Select and Editor */}
+      <div className="flex-1 min-h-0">
+       <div className="flex items-center justify-between p-2">
+        {roomMode !== 'debug' && (
+         <select 
+          className="bg-gray-800 text-gray-300 p-1.5 rounded border border-gray-700" 
+          value={language} 
+          onChange={handleLangChange}
+         >
+          <option value="python">Python</option>
+          <option value="cpp">C++</option>
+          <option value="java">Java</option>
+          <option value="javascript">JavaScript</option>
+          <option value="typescript">TypeScript</option>
+          <option value="go">Golang</option>
+          <option value="rust">Rust</option>
+         </select>
+        )}
+        <ToggleSwitch enabled={isLiveEnabled} setEnabled={setIsLiveEnabled} label="Live Sync" />
+       </div>
+       <div className={roomMode === 'debug' ? 'h-[calc(100%-48px)]' : 'h-[calc(100%-56px)]'}>
        <Editor 
         theme="vs-dark" 
         language={language} 
