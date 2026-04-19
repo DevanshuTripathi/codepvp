@@ -35,6 +35,7 @@ import Contest from "./pages/Contest"
 import AboutUs from "./pages/AboutUs"
 import Feedback from "./pages/Feedback"
 import AddBadge from "./pages/AddBadge"
+import AdminDashboard from "./pages/FeedBackDashboard"
 
 function App() {
 
@@ -122,6 +123,15 @@ function App() {
               element={
                 <AdminRoute>
                   <AddBadge />
+                </AdminRoute>
+              }
+            />
+
+            <Route
+              path="admin/feedback"
+              element={
+                <AdminRoute>
+                  <AdminDashboard />
                 </AdminRoute>
               }
             />
