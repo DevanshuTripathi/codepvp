@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Host: codepvp.tech
+Sitemap: https://codepvp.tech/sitemap.xml
