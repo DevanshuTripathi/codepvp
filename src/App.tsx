@@ -36,14 +36,9 @@ import AboutUs from "./pages/AboutUs"
 import Feedback from "./pages/Feedback"
 import AddBadge from "./pages/AddBadge"
 import AdminDashboard from "./pages/FeedbackDashboard"
+import HowItWorks from "./pages/HowItWorks"
 
 function App() {
-
-  const host = window.location.hostname;
-
-  if (host.startsWith("about.")) {
-    return <AboutUs />
-  }
 
   return (
     <UserProvider>
@@ -61,6 +56,8 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
             <Route path="404" element={<NotFound />} />
+            <Route path="about" element={<AboutUs />} />
+            <Route path="how-it-works" element={<HowItWorks />} />
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />
             <Route path="onboarding" element={<Onboarding />} />
