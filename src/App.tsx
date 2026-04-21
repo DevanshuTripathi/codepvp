@@ -37,8 +37,14 @@ import Feedback from "./pages/Feedback"
 import AddBadge from "./pages/AddBadge"
 import AdminDashboard from "./pages/FeedbackDashboard"
 import HowItWorks from "./pages/HowItWorks"
+import Hiring from "./pages/Hiring"
 
 function App() {
+
+  const host = window.location.hostname;
+  const subdomain = host.split('.')[0];
+
+  if (subdomain === "hiring") return <Hiring />;
 
   return (
     <UserProvider>
