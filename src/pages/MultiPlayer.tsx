@@ -396,6 +396,9 @@ const MultiPlayer: React.FC = () => {
   }, [currentUserName]);
 
   useEffect(() => {
+
+    if (!currentUserName) return;
+
     socket.on('matchFound', (data: any) => {
       navigate(`/room/${data.roomId}/problemset/team/${data.team}`);
     });
@@ -495,7 +498,7 @@ const MultiPlayer: React.FC = () => {
     return slots;
   };
 
-  const isLeader = partyLeader === currentUserName;
+  const isLeader = !partyLeader || partyLeader === currentUserName;
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: '#080e1a' }}>
