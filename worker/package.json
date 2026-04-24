@@ -1,0 +1,18 @@
+{
+  "name": "worker",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "worker.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:worker": "node worker.js"
+  },
+  "dependencies": {
+    "bullmq": "^5.76.1",
+    "crypto": "^1.0.1",
+    "dotenv": "^17.4.2"
+  }
+}
