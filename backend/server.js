@@ -9,6 +9,18 @@ import { getVerdict } from "./utils/judge.js";
 import { v2 as cloudinary } from 'cloudinary';
 import fileUpload from 'express-fileupload';
 import crypto from "crypto";
+import { Queue, QueueEvents } from 'bullmq';
+import { db } from "./firebaseAdmin.js";
+
+const redisConnection = {
+    host: 'just-trout-105699.upstash.io',
+    port: 6379,
+    password: process.env.REDIS_PASS,
+    tls: {}
+};
+
+const submissionQueue = new Queue('submissions', { connection: redisConnection });
+const queueEvents = new QueueEvents('submissions', { connection: redisConnection });
 
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -25,113 +37,142 @@ export const submissions = new Map();
 const queue = [];
 let averageProcessTimeMs = 2000;
 
-const ALL_JUDGE_NODES = [
-  "http://host.docker.internal:2358",
-  process.env.JUDGE,
-  process.env.JUDGE,
-  process.env.JUDGE,
-  process.env.JUDGE1,
-  process.env.JUDGE1,
-  process.env.JUDGE1,
-  process.env.JUDGE2,
-  process.env.JUDGE2,
-  process.env.JUDGE2,
-];
+// const ALL_JUDGE_NODES = [
+//   "http://host.docker.internal:2358",
+//   process.env.JUDGE,
+//   process.env.JUDGE,
+//   process.env.JUDGE,
+//   process.env.JUDGE1,
+//   process.env.JUDGE1,
+//   process.env.JUDGE1,
+//   process.env.JUDGE2,
+//   process.env.JUDGE2,
+//   process.env.JUDGE2,
+// ];
 
-let JUDGE_NODES = [...ALL_JUDGE_NODES];
-let currentNodeIndex = 0;
+// let JUDGE_NODES = [...ALL_JUDGE_NODES];
+// let currentNodeIndex = 0;
 
-function getNextJudgeNode() {
-    const node = JUDGE_NODES[currentNodeIndex];
-    currentNodeIndex = (currentNodeIndex + 1) % JUDGE_NODES.length;
-    return node;
-}
+// function getNextJudgeNode() {
+//     const node = JUDGE_NODES[currentNodeIndex];
+//     currentNodeIndex = (currentNodeIndex + 1) % JUDGE_NODES.length;
+//     return node;
+// }
 
-function markNodeDead(url) {
-    if (!JUDGE_NODES.includes(url)) return; // Already marked dead
+// function markNodeDead(url) {
+//     if (!JUDGE_NODES.includes(url)) return; // Already marked dead
 
-    console.error(`🚨 Judge Node Offline: ${url}. Kicking it out of rotation.`);
+//     console.error(`🚨 Judge Node Offline: ${url}. Kicking it out of rotation.`);
     
-    // Remove ALL instances of this URL from the active array
-    JUDGE_NODES = JUDGE_NODES.filter(node => node !== url);
+//     // Remove ALL instances of this URL from the active array
+//     JUDGE_NODES = JUDGE_NODES.filter(node => node !== url);
 
-    // Start a heartbeat check to revive it
-    const reviveInterval = setInterval(async () => {
-        console.log(`Heartbeat check: Is ${url} back online?`);
-        try {
-            // Ping the Judge0 config endpoint as a health check
-            const res = await fetch(`${url}/languages`); 
-            if (res.ok) {
-                console.log(`Judge Node Revived! Adding ${url} back to rotation.`);
+//     // Start a heartbeat check to revive it
+//     const reviveInterval = setInterval(async () => {
+//         console.log(`Heartbeat check: Is ${url} back online?`);
+//         try {
+//             // Ping the Judge0 config endpoint as a health check
+//             const res = await fetch(`${url}/languages`); 
+//             if (res.ok) {
+//                 console.log(`Judge Node Revived! Adding ${url} back to rotation.`);
                 
-                // Add it back with the correct weight (e.g., 3 times for remote)
-                const originalWeight = ALL_JUDGE_NODES.filter(n => n === url).length;
-                for(let i=0; i < originalWeight; i++) JUDGE_NODES.push(url);
+//                 // Add it back with the correct weight (e.g., 3 times for remote)
+//                 const originalWeight = ALL_JUDGE_NODES.filter(n => n === url).length;
+//                 for(let i=0; i < originalWeight; i++) JUDGE_NODES.push(url);
                 
-                clearInterval(reviveInterval); // Stop pinging
-            }
-        } catch (e) {
-            // Still dead, do nothing. Interval will run again.
-        }
-    }, 60000); // Check every 60 seconds
-}
+//                 clearInterval(reviveInterval); // Stop pinging
+//             }
+//         } catch (e) {
+//             // Still dead, do nothing. Interval will run again.
+//         }
+//     }, 60000); // Check every 60 seconds
+// }
 
-async function runJudgeInBackground(id, code, problemId, languageId, attempt = 1) {
-    // 1. Get the sub object immediately
-    const sub = submissions.get(id); 
-    const selectedNode = getNextJudgeNode();
+// async function runJudgeInBackground(id, code, problemId, languageId, attempt = 1) {
+//     // 1. Get the sub object immediately
+//     const sub = submissions.get(id); 
+//     const selectedNode = getNextJudgeNode();
 
-    // Panic Protocol: If all VMs are down
-    if (!selectedNode) {
-        if (submissions.has(id)) {
-            const currentSub = submissions.get(id);
-            submissions.set(id, { ...currentSub, status: "Error", errorMessage: "All execution servers are offline." });
-        }
-        const index = queue.indexOf(id);
-        if (index > -1) queue.splice(index, 1);
-        return;
-    }
+//     // Panic Protocol: If all VMs are down
+//     if (!selectedNode) {
+//         if (submissions.has(id)) {
+//             const currentSub = submissions.get(id);
+//             submissions.set(id, { ...currentSub, status: "Error", errorMessage: "All execution servers are offline." });
+//         }
+//         const index = queue.indexOf(id);
+//         if (index > -1) queue.splice(index, 1);
+//         return;
+//     }
 
-    const startTime = Date.now();
+//     const startTime = Date.now();
     
-    try {
-        const result = await getVerdict(code, problemId, languageId, selectedNode);
+//     try {
+//         const result = await getVerdict(code, problemId, languageId, selectedNode);
         
-        if (!result) {
-            throw new Error("Judge returned no result");
-        }
+//         if (!result) {
+//             throw new Error("Judge returned no result");
+//         }
 
-        const duration = Date.now() - startTime;
+//         const duration = Date.now() - startTime;
 
-        averageProcessTimeMs = (averageProcessTimeMs * 0.8) + (duration * 0.2);
+//         averageProcessTimeMs = (averageProcessTimeMs * 0.8) + (duration * 0.2);
 
-        // 2. Use the most fresh data from the Map
-        const currentSub = submissions.get(id); 
-        submissions.set(id, { ...currentSub, status: "Completed", ...result });
+//         // 2. Use the most fresh data from the Map
+//         const currentSub = submissions.get(id); 
+//         submissions.set(id, { ...currentSub, status: "Completed", ...result });
 
-        const index = queue.indexOf(id);
-        if (index > -1) queue.splice(index, 1);
-    } catch (e) {
-        console.error(`Judging Error on ${selectedNode}:`, e.message);
+//         const index = queue.indexOf(id);
+//         if (index > -1) queue.splice(index, 1);
+//     } catch (e) {
+//         console.error(`Judging Error on ${selectedNode}:`, e.message);
 
-        markNodeDead(selectedNode);
+//         markNodeDead(selectedNode);
 
-        // 2. Automatically retry the submission on a healthy server
-        if (attempt < 3 && JUDGE_NODES.length > 0) {
-            console.log(`🔄 Retrying submission ${id} (Attempt ${attempt + 1})...`);
-            // Recursively call the function. Do NOT remove from queue yet!
-            return runJudgeInBackground(id, code, problemId, languageId, attempt + 1);
-        } else {
-            // 3. Give up permanently after 3 fails or if no nodes are left
-            if (submissions.has(id)) {
-                const currentSub = submissions.get(id);
-                submissions.set(id, { ...currentSub, status: "Error", errorMessage: "Execution failed after multiple network attempts." });
-            }
-            const index = queue.indexOf(id);
-            if (index > -1) queue.splice(index, 1);
-        }
+//         // 2. Automatically retry the submission on a healthy server
+//         if (attempt < 3 && JUDGE_NODES.length > 0) {
+//             console.log(`🔄 Retrying submission ${id} (Attempt ${attempt + 1})...`);
+//             // Recursively call the function. Do NOT remove from queue yet!
+//             return runJudgeInBackground(id, code, problemId, languageId, attempt + 1);
+//         } else {
+//             // 3. Give up permanently after 3 fails or if no nodes are left
+//             if (submissions.has(id)) {
+//                 const currentSub = submissions.get(id);
+//                 submissions.set(id, { ...currentSub, status: "Error", errorMessage: "Execution failed after multiple network attempts." });
+//             }
+//             const index = queue.indexOf(id);
+//             if (index > -1) queue.splice(index, 1);
+//         }
+//     }
+// }
+
+queueEvents.on('completed', async ({ jobId, returnvalue }) => {
+    // returnvalue comes directly from your worker.js
+    const { submissionId, ac, result, status, error } = returnvalue;
+    
+    if (submissions.has(submissionId)) {
+        const currentSub = submissions.get(submissionId);
+        
+        const finalStatus = status === 'Internal System Error' || status === 'Error' ? 'Error' : 'Completed';
+
+        const updatedSub = { 
+            ...currentSub, 
+            status: finalStatus, 
+            ac: ac || false, 
+            result: result || [],
+            errorMessage: error || ""
+        };
+        
+        submissions.set(submissionId, updatedSub);
+
+        // Optional: Emit this directly to the frontend via WebSockets!
+        // io.to(currentSub.roomId).emit("submission_result", updatedSub);
+        console.log(`✅ Submission ${submissionId} completed and mapped!`);
     }
-}
+});
+
+queueEvents.on('failed', ({ jobId, failedReason }) => {
+    console.error(`❌ Job ${jobId} failed completely:`, failedReason);
+});
 
 app.use(
   cors({
@@ -157,48 +198,68 @@ app.post("/api/submit", async (req, res) => {
 
   const { problemId, sourceCode, language, userId, roomId } = req.body;
 
-  const subData = {
-      id,
-      status: "Processing",
-      problemId: problemId,
-      language: language,
-      submittedAt: Date.now(),
-      userId: userId || "anaon tester", // To filter in the submissions tab
-      roomId: roomId
-  };
+  try {
+      // 1. Fetch test cases from Firebase
+      let doc = await db.collection('ProblemsWithHTC').doc(problemId).get();
+      if (!doc.exists) {
+          doc = await db.collection('DebugProblems').doc(problemId).get();
+      }
 
-  submissions.set(id, subData);
-  queue.push(id);
+      if (!doc.exists) {
+          return res.status(404).json({ error: "Problem not found" });
+      }
 
-  runJudgeInBackground(id, sourceCode, problemId, language);
+      const problemData = doc.data();
+      const testCases = [
+          ...(problemData.samples || []).map(tc => ({ ...tc, hidden: false })),
+          ...(problemData.hiddenTestCases || []).map(tc => ({ ...tc, hidden: true }))
+      ];
 
-  res.json({ message: "Submitted successfully!", submissionId: id });
+      // 2. Save pending status to local Map
+      const subData = {
+          id,
+          status: "Processing",
+          problemId,
+          language,
+          submittedAt: Date.now(),
+          userId: userId || "anon tester",
+          roomId
+      };
+      submissions.set(id, subData);
+
+      // 3. Push job to Redis Queue with the test cases included
+      await submissionQueue.add('execute', {
+          submissionId: id,
+          language,
+          sourceCode,
+          testCases
+      }, { jobId: id, removeOnComplete: true, removeOnFail: 100 }); // Setting jobId helps track it in queueEvents
+
+      res.json({ message: "Submitted successfully!", submissionId: id });
+
+  } catch (error) {
+      console.error("Submission error:", error);
+      res.status(500).json({ error: "Failed to queue submission" });
+  }
 });
 
-app.get("/api/status/:id", (req, res) => {
+app.get("/api/status/:id", async (req, res) => {
     const sub = submissions.get(req.params.id);
     if (!sub) return res.status(404).json({ error: "Not found" });
 
     // Calculate queue position
     let position = 0;
-    let estimatedWaitTimeMs = 0;
     if (sub.status === "Processing") {
-        position = queue.indexOf(req.params.id) + 1;
+        const state = await submissionQueue.getJobState(req.params.id);
 
-        const activeNodesCount = JUDGE_NODES.length;
-
-        if (activeNodesCount === 0) {
-             // Edge case: All nodes are dead. Set to -1 or a flag to show "Unknown" on the frontend
-            estimatedWaitTimeMs = -1; 
-        } else {
-            // Group the queue into parallel batches based on active nodes
-            // Example: If position is 4 and you have 3 nodes, it's in the 2nd batch (Math.ceil(4/3) = 2)
-            const effectiveBatch = Math.ceil(position / activeNodesCount);
-            estimatedWaitTimeMs = Math.round(effectiveBatch * averageProcessTimeMs);
+        if (state === 'waiting') {
+            // Find how many jobs are ahead of this one
+            const waitingJobs = await submissionQueue.getWaiting();
+            position = waitingJobs.findIndex(job => job.id === req.params.id) + 1;
         }
     }
 
-    res.json({ ...sub, queuePosition: position, estimatedWaitTime: estimatedWaitTimeMs });
+    res.json({ ...sub, queuePosition: position });
 });
 
 app.post('/upload-avatar', async (req, res) => {

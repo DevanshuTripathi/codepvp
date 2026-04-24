@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n FRONTEND,BACKEND -c green,blue \"npm run dev:frontend\" \"npm run dev:backend --prefix backend\"",
+    "dev": "concurrently -n FRONTEND,BACKEND, WORKER -c green,blue,magenta \"npm run dev:frontend\" \"npm run dev:backend --prefix backend\" \"npm run dev:worker --prefix worker\"",
     "dev:frontend": "vite",
     "dev:backend": "npm run dev:backend --prefix backend",
+    "dev:worker": "npm run dev:worker --prefix worker",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

@@ -59,14 +59,6 @@ const SubmissionsView: React.FC<{ roomId: string, problemId: string, teamId: str
   const solvedMarked = useRef<Set<string>>(new Set());
   const completedIds = useRef<Set<string>>(new Set());
 
-  const formatETA = (ms: number) => {
-    if (!ms) return "Calculating...";
-    const seconds = Math.ceil(ms / 1000);
-    if (seconds < 60) return `~${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    return `~${minutes}m`;
-  };
-
   const fetchStatuses = async () => {
     const ids = JSON.parse(localStorage.getItem(localKey) || '[]');
     if (ids.length === 0) return;
@@ -158,12 +150,6 @@ const SubmissionsView: React.FC<{ roomId: string, problemId: string, teamId: str
               }`}>
                 {sub.status === 'Processing' ? `Queue #${sub.queuePosition}` : (sub.ac ? 'Accepted' : 'Wrong Answer')}
               </div>
-
-              {sub.status === 'Processing' && sub.estimatedWaitTime !== undefined && (
-                <div className="text-[10px] text-yellow-500/70 font-mono mt-1">
-                  ETA: {formatETA(sub.estimatedWaitTime)}
-                </div>
-              )}
               
               {sub.status === 'Completed' && (
                 <button 
