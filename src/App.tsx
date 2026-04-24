@@ -22,6 +22,8 @@ import './App.css'
 import { UserProvider } from "./hooks/useUser"
 import { Toaster } from "react-hot-toast"
 
+// Pls remove this comment
+
 // ADMIN COMPONENTS
 import AdminRoute from "./pages/components/AdminRoute"
 import AdminAddQuestion from "./pages/AddQuestion"
