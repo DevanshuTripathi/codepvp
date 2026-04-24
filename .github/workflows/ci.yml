@@ -68,6 +68,7 @@ jobs:
             git pull origin main
 
             # exports
+            export REDIS_PASS="${{ secrets.REDIS_PASS }}"
             export VITE_JUDGE0_URL="${{ secrets.VITE_JUDGE0_URL }}"
             export VITE_JUDGE1_URL="${{ secrets.VITE_JUDGE1_URL }}"
             export VITE_JUDGE2_URL="${{ secrets.VITE_JUDGE2_URL }}"
