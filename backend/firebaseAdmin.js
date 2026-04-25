@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import fs from "fs";
 import "dotenv/config";
+import { readFileSync } from 'fs';
 
 let serviceAccount;
 
@@ -11,9 +12,14 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   serviceAccount = JSON.parse(readFileSync(jsonPath, 'utf8'));
 }
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+} else {
+  // Optional: If it's already initialized, just use the existing default app
+  admin.app();
+}
 
 const db = admin.firestore();
 
