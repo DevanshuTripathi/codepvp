@@ -17,6 +17,7 @@ RUN apt-get update && \
     default-jdk \
     golang \
     rustc \
+    firejail \
     && rm -rf /var/lib/apt/lists/*
 
 # Install TypeScript and ts-node globally

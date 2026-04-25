@@ -189,7 +189,10 @@ app.use(fileUpload({
 
 app.use(express.json());
 
-// Optional: REST routes can be added here
+app.get("/api/ping", (req, res) => {
+  res.send("pong");
+})
+
 app.get("/api/rooms", (req, res) => res.json(rooms));
 
 app.post("/api/submit", async (req, res) => {
