@@ -2,6 +2,7 @@ import { rooms, activeTimers, userToRoom } from "../store/rooms.js";
 import { submissions } from "../server.js";
 import admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { readFileSync } from 'fs';
 
 let serviceAccount;
 
