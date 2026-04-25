@@ -4,22 +4,16 @@ import "dotenv/config";
 
 let serviceAccount;
 
-if (!admin.apps.length) {
-
-  if (process.env.K_SERVICE) {
-    serviceAccount = JSON.parse(
-      fs.readFileSync("/secrets/serviceAccountKey", "utf8")
-    );
-  } else {
-    serviceAccount = JSON.parse(
-      fs.readFileSync("./secrets/serviceAccountKey.json", "utf8")
-    );
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  const jsonPath = new URL('../secrets/serviceAccountKey.json', import.meta.url);
+  serviceAccount = JSON.parse(readFileSync(jsonPath, 'utf8'));
 }
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const db = admin.firestore();
 
