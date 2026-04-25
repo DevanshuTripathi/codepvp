@@ -41,7 +41,13 @@ function spawnProcess(cmd, args, inputStr, workingDir) {
         let stdoutData = '';
         let stderrData = '';
 
-        const child = spawn(cmd, args, { cwd: workingDir });
+        const secureEnv = { PATH: process.env.PATH };
+
+        const child = spawn(cmd, args, { 
+            cwd: workingDir,
+            env: secureEnv, // Applies the sterilized environment
+            detached: false // Prevents the child process from running independently
+        });
 
         if (inputStr) {
             const finalInput = inputStr.endsWith('\n') ? inputStr : inputStr + '\n';
@@ -109,7 +115,19 @@ async function executeCode(language, code, testCases) {
         }
 
         // Step B: Execution against Test Cases
-        const [runCmd, runArgs] = config.run(codeFilePath, sandboxDir);
+        let [runCmd, runArgs] = config.run(codeFilePath, sandboxDir);
+
+        if (process.platform === 'linux') {
+            runArgs = [
+                '--quiet',               // Suppress Firejail's own terminal output
+                '--net=none',            // Kill internet access (Fixes Cryptomining/Botnets)
+                '--rlimit-as=256m',      // Hard cap RAM at 256MB (Fixes Fork Bombs)
+                '--rlimit-fsize=5m',     // Prevent generating files larger than 5MB
+                runCmd, 
+                ...runArgs
+            ];
+            runCmd = 'firejail';
+        }
         
         let results = [];
         let allPassed = true;

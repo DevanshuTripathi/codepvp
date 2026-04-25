@@ -7,74 +7,42 @@ on:
     branches: [main]
 
 jobs:
-  build:
+
+  build-and-push:
     runs-on: ubuntu-latest
 
-    steps:
+    steps: 
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and tag Docker images
-        run: |
-          docker compose build \
-            --build-arg VITE_RAPID_API_KEY=${{ secrets.VITE_RAPID_API_KEY }} \
-            --build-arg VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }} \
-            --build-arg VITE_BACKEND_URL=${{ secrets.VITE_BACKEND_URL }} \
-            --build-arg VITE_JUDGE0_URL=${{ secrets.VITE_JUDGE0_URL }}
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      # Backend tests
-      - name: Install backend deps
-        run: |
-          cd backend
-          npm ci
+      - name: Log in to Azure Container Registry
+        uses: azure/docker-login@v2
+        with: 
+          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
       
-      - name: Run backend lint/test
+      - name: Build and Push Backend image
         run: |
-          cd backend
-          npm run lint || echo "No linter configured"
-          npm test || echo "No tests configured"
-      
-      # Frontend build check
-      - name: Install frontend deps
-        run: npm ci
-      - name: Build frontend
-        run: npm run build
+          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/backend:${{ github.sha }} ./backend
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/backend:${{ github.sha }}
 
-  deploy:
-    needs: build
+  deploy: 
+    needs: build-and-push
+
     runs-on: ubuntu-latest
-    # Only run the deploy job if we are merging/pushing to the main branch
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-      - name: Deploy to Azure VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          password: ${{ secrets.VM_PASSWORD }}
-          script: |
-            cd ~/codepvp
-            
-            # Pull the latest code from GitHub
-            git pull origin main
 
-            # exports
-            export REDIS_PASS="${{ secrets.REDIS_PASS }}"
-            export VITE_JUDGE0_URL="${{ secrets.VITE_JUDGE0_URL }}"
-            export VITE_JUDGE1_URL="${{ secrets.VITE_JUDGE1_URL }}"
-            export VITE_JUDGE2_URL="${{ secrets.VITE_JUDGE2_URL }}"
-            
-            # Rebuild and restart the backend container without downtime
-            docker compose up -d --build backend caddy
-            
-            # Clean up old/dangling Docker images to save disk space
-            docker image prune -f
+    steps: 
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        run: |
+          az login -u ${{ secrets.AZURE_USERNAME }} -p ${{ secrets.AZURE_PASSWORD }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ secrets.ACA_APP_NAME }} \
+            --resource-group ${{ secrets.ACA_RESOURCE_GROUP }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/backend:${{ github.sha }}
