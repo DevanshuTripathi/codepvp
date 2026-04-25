@@ -33,14 +33,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps: 
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Azure Login
-        uses: azure/login@v2
-        with: 
-          creds: '{"clientId":"${{ secrets.AZURE_USERNAME }}","clientSecret":"${{ secrets.AZURE_PASSWORD }}","subscriptionId":"dd9de111-2eb7-44b9-9673-f4d265c9a967","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
-      
+        run: |
+          az login -u ${{ secrets.AZURE_USERNAME }} -p ${{ secrets.AZURE_PASSWORD }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+
       - name: Deploy to Azure Container Apps
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          containerAppName: ${{ secrets.ACA_APP_NAME }}
-          resourceGroup: ${{ secrets.ACA_RESOURCE_GROUP }}
-          imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/backend:${{ github.sha }}
+        run: |
+          az containerapp update \
+            --name ${{ secrets.ACA_APP_NAME }} \
+            --resource-group ${{ secrets.ACA_RESOURCE_GROUP }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/backend:${{ github.sha }}
