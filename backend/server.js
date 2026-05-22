@@ -2,38 +2,39 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { setupSocket } from "./sockets/index.js";
+import { attachRedisAdapter } from "./utils/redisClient.js";
+import { initRoomSync } from "./utils/roomSync.js";
+import { initRedis, getRedisClient } from './services/redis.js';
+import { initPubSub } from './services/pubsub.js';
+import { initRoomService, listRooms } from './services/roomService.js';
 import "dotenv/config";
 import cors from "cors";
-import { rooms } from "./store/rooms.js";
 import { getVerdict } from "./utils/judge.js";
-import { v2 as cloudinary } from 'cloudinary';
 import fileUpload from 'express-fileupload';
 import crypto from "crypto";
 import { Queue, QueueEvents } from 'bullmq';
 import { db } from "./firebaseAdmin.js";
+import { saveSubmission, getSubmission } from './services/submissionService.js';
+// Simple console logging used to keep the implementation minimal
+const REPLICA_ID = process.env.REPLICA_ID || null;
+console.log('Replica starting', { replica: REPLICA_ID });
 
 const redisConnection = {
-    host: 'just-trout-105699.upstash.io',
-    port: 6379,
-    password: process.env.REDIS_PASS,
-    tls: {}
+  host: process.env.REDIS_HOST || '127.0.0.1',
+  port: process.env.REDIS_PORT || 6379,
+  password: process.env.REDIS_PASS || process.env.REDIS_PASSWORD || '',
 };
 
 const submissionQueue = new Queue('submissions', { connection: redisConnection });
 const queueEvents = new QueueEvents('submissions', { connection: redisConnection });
 
-cloudinary.config({
-  cloud_name: process.env.CLOUD_NAME,
-  api_key: process.env.API_KEY,
-  api_secret: process.env.API_SECRET,
-});
+// cloudinary removed to keep backend minimal; upload endpoint removed below if unused
 
 const PORT = process.env.PORT || 5000;
 const app = express();
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-export const submissions = new Map();
 const queue = [];
 let averageProcessTimeMs = 2000;
 
@@ -146,32 +147,20 @@ let averageProcessTimeMs = 2000;
 // }
 
 queueEvents.on('completed', async ({ jobId, returnvalue }) => {
-    // returnvalue comes directly from your worker.js
-    const { submissionId, ac, result, status, error } = returnvalue;
-    
-    if (submissions.has(submissionId)) {
-        const currentSub = submissions.get(submissionId);
-        
-        const finalStatus = status === 'Internal System Error' || status === 'Error' ? 'Error' : 'Completed';
-
-        const updatedSub = { 
-            ...currentSub, 
-            status: finalStatus, 
-            ac: ac || false, 
-            result: result || [],
-            errorMessage: error || ""
-        };
-        
-        submissions.set(submissionId, updatedSub);
-
-        // Optional: Emit this directly to the frontend via WebSockets!
-        // io.to(currentSub.roomId).emit("submission_result", updatedSub);
-        console.log(`✅ Submission ${submissionId} completed and mapped!`);
-    }
+  const { submissionId, ac, result, status, error } = returnvalue;
+  try {
+    const current = await getSubmission(submissionId);
+    if (!current) return;
+    const finalStatus = status === 'Internal System Error' || status === 'Error' ? 'Error' : 'Completed';
+    await saveSubmission(submissionId, { ...current, status: finalStatus, ac: ac || false, result: result || [], errorMessage: error || '' });
+    console.log('Submission completed and persisted', submissionId);
+  } catch (e) {
+    console.error('queue completed handler error', e);
+  }
 });
 
 queueEvents.on('failed', ({ jobId, failedReason }) => {
-    console.error(`❌ Job ${jobId} failed completely:`, failedReason);
+  console.error('Job failed completely', { jobId, failedReason });
 });
 
 app.use(
@@ -189,11 +178,19 @@ app.use(fileUpload({
 
 app.use(express.json());
 
-app.get("/api/ping", (req, res) => {
-  res.send("pong");
-})
+app.get("/api/ping", (req, res) => res.send("pong"));
 
-app.get("/api/rooms", (req, res) => res.json(rooms));
+// Metrics endpoint
+// metrics endpoint removed to simplify architecture
+
+app.get("/api/rooms", async (req, res) => {
+  try {
+    const all = await listRooms();
+    res.json(all);
+  } catch (e) {
+    res.status(500).json({ error: 'failed to list rooms', msg: e.message });
+  }
+});
 
 app.post("/api/submit", async (req, res) => {
 
@@ -218,17 +215,17 @@ app.post("/api/submit", async (req, res) => {
           ...(problemData.hiddenTestCases || []).map(tc => ({ ...tc, hidden: true }))
       ];
 
-      // 2. Save pending status to local Map
+      // 2. Save pending status to Redis
       const subData = {
-          id,
-          status: "Processing",
-          problemId,
-          language,
-          submittedAt: Date.now(),
-          userId: userId || "anon tester",
-          roomId
+        id,
+        status: 'Processing',
+        problemId,
+        language,
+        submittedAt: String(Date.now()),
+        userId: userId || 'anon tester',
+        roomId
       };
-      submissions.set(id, subData);
+      await saveSubmission(id, subData);
 
       // 3. Push job to Redis Queue with the test cases included
       await submissionQueue.add('execute', {
@@ -247,50 +244,113 @@ app.post("/api/submit", async (req, res) => {
 });
 
 app.get("/api/status/:id", async (req, res) => {
-    const sub = submissions.get(req.params.id);
-    if (!sub) return res.status(404).json({ error: "Not found" });
-
-    // Calculate queue position
-    let position = 0;
-    if (sub.status === "Processing") {
-        const state = await submissionQueue.getJobState(req.params.id);
-
-        if (state === 'waiting') {
-            // Find how many jobs are ahead of this one
-            const waitingJobs = await submissionQueue.getWaiting();
-            position = waitingJobs.findIndex(job => job.id === req.params.id) + 1;
-        }
-    }
-
-    res.json({ ...sub, queuePosition: position });
-});
-
-app.post('/upload-avatar', async (req, res) => {
   try {
-    if (!req.files || !req.files.avatar) {
-      return res.status(400).json({ error: 'No file uploaded' });
+    const sub = await getSubmission(req.params.id);
+    if (!sub || Object.keys(sub).length === 0) return res.status(404).json({ error: 'Not found' });
+    let position = 0;
+    if (sub.status === 'Processing') {
+      const state = await submissionQueue.getJobState(req.params.id);
+      if (state === 'waiting') {
+        const waitingJobs = await submissionQueue.getWaiting();
+        position = waitingJobs.findIndex(job => job.id === req.params.id) + 1;
+      }
     }
-
-    const file = req.files.avatar;
-
-    const result = await cloudinary.uploader.upload(file.tempFilePath, {
-      folder: 'avatars',
-      transformation: [
-        { width: 300, height: 300, crop: "fill" },
-        { quality: "auto" }
-      ]
-    });
-
-    res.json({ url: result.secure_url });
-
-  } catch (err) {
-    console.error(err); // 👈 IMPORTANT
-    res.status(500).json({ error: 'Upload failed' });
+    res.json({ ...sub, queuePosition: position });
+  } catch (e) {
+    res.status(500).json({ error: 'failed to fetch status', message: e.message });
   }
 });
 
-setupSocket(io);
+// Avatar upload endpoint removed to keep backend minimal
 
-server.listen(PORT, "0.0.0.0", () =>
-  console.log(`🚀 Server running on port ${PORT}`),
-);
+// Attach Redis adapter (if configured) and then setup sockets + start server
+// Initialize Redis, Pub/Sub, adapter and room service before starting
+(async () => {
+  try {
+    await initRedis();
+    // verify redis connectivity early (fail-fast)
+    try {
+      const rc = getRedisClient();
+      const pong = await rc.ping();
+      if (!pong) throw new Error('Redis ping failed');
+      console.log('Redis reachable');
+    } catch (e) {
+      console.error('Redis unavailable during startup', e);
+      throw e;
+    }
+
+    await attachRedisAdapter(io);
+    const pubsubInit = await initPubSub();
+    if (!pubsubInit || !pubsubInit.pub || !pubsubInit.sub) {
+      throw new Error('PubSub initialization failed');
+    }
+    await initRoomService();
+    await initRoomSync(io);
+    // advanced timer workers and sweepers removed for simplicity
+    // Wire timer fired events to socket.io broadcasts
+    const pubsub = await import('./services/pubsub.js');
+    // Timer events handled via pubsub if implemented by other services; kept minimal here
+  } catch (e) {
+    console.error('Startup init warnings:', e);
+  }
+
+  setupSocket(io);
+
+  // instrument socket.io events for metrics
+  io.of('/').adapter.on('error', (err) => console.error('socket.io adapter error', err));
+  io.on('connection', (sock) => {
+    console.log('socket connected', { socketId: sock.id });
+    sock.on('disconnect', () => {
+      console.log('socket disconnected', { socketId: sock.id });
+    });
+  });
+
+  // Health endpoints
+  app.get('/health', (req, res) => res.json({ status: 'ok' }));
+  app.get('/redis-health', async (req, res) => {
+    try {
+      const c = getRedisClient();
+      const pong = await c.ping();
+      res.json({ redis: pong });
+    } catch (err) {
+      res.status(500).json({ redis: 'unavailable', error: err.message });
+    }
+  });
+
+  server.listen(PORT, "0.0.0.0", () =>
+    console.log(`Server running on port ${PORT}`),
+  );
+})();
+
+// Graceful shutdown
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
+
+async function gracefulShutdown() {
+  console.log('Received shutdown signal, cleaning up...');
+  try {
+    // stop timer worker
+    // No timer workers to stop in simplified architecture
+
+    // disconnect redis
+    try {
+      const { getRedisClient } = await import('./services/redis.js');
+      const c = getRedisClient();
+      if (c) await c.disconnect();
+    } catch (e) {
+      // ignore
+    }
+
+    // close server
+    server.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
+
+    // fallback exit
+    setTimeout(() => process.exit(0), 5000);
+  } catch (e) {
+    console.error('Graceful shutdown error', e);
+    process.exit(1);
+  }
+}

@@ -1,0 +1,58 @@
+version: '3.8'
+
+networks:
+  internal:
+    driver: bridge
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: codepvp_redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    networks:
+      - internal
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: codepvp_backend:prod
+    # container_name removed to allow scaling multiple replicas
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASS=
+      - REPLICA_ID=${REPLICA_ID}
+      - LOG_LEVEL=info
+    depends_on:
+      - redis
+    networks:
+      - internal
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: codepvp_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+# Notes:
+# - For docker-compose v3 files, `deploy.replicas` is supported by Docker Swarm. To run locally with multiple replicas,
+#   use `docker-compose up --scale backend=3` or deploy the compose file to a Swarm/Kubernetes cluster.
+# - Ensure environment variables (Redis password, cloudinary, firebase) are provided via an env file or CI/CD secrets.
