@@ -15,6 +15,7 @@ import fileUpload from 'express-fileupload';
 import crypto from "crypto";
 import { Queue, QueueEvents } from 'bullmq';
 import { db } from "./firebaseAdmin.js";
+import { saveSubmission, getSubmission } from './services/submissionService.js';
 
 const redisConnection = {
     host: 'just-trout-105699.upstash.io',
@@ -37,7 +38,6 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-export const submissions = new Map();
 const queue = [];
 let averageProcessTimeMs = 2000;
 
@@ -150,28 +150,16 @@ let averageProcessTimeMs = 2000;
 // }
 
 queueEvents.on('completed', async ({ jobId, returnvalue }) => {
-    // returnvalue comes directly from your worker.js
-    const { submissionId, ac, result, status, error } = returnvalue;
-    
-    if (submissions.has(submissionId)) {
-        const currentSub = submissions.get(submissionId);
-        
-        const finalStatus = status === 'Internal System Error' || status === 'Error' ? 'Error' : 'Completed';
-
-        const updatedSub = { 
-            ...currentSub, 
-            status: finalStatus, 
-            ac: ac || false, 
-            result: result || [],
-            errorMessage: error || ""
-        };
-        
-        submissions.set(submissionId, updatedSub);
-
-        // Optional: Emit this directly to the frontend via WebSockets!
-        // io.to(currentSub.roomId).emit("submission_result", updatedSub);
-        console.log(`✅ Submission ${submissionId} completed and mapped!`);
-    }
+  const { submissionId, ac, result, status, error } = returnvalue;
+  try {
+    const current = await getSubmission(submissionId);
+    if (!current) return;
+    const finalStatus = status === 'Internal System Error' || status === 'Error' ? 'Error' : 'Completed';
+    await saveSubmission(submissionId, { ...current, status: finalStatus, ac: ac || false, result: result || [], errorMessage: error || '' });
+    console.log(`✅ Submission ${submissionId} completed and persisted!`);
+  } catch (e) {
+    console.error('queue completed handler error', e);
+  }
 });
 
 queueEvents.on('failed', ({ jobId, failedReason }) => {
@@ -229,17 +217,17 @@ app.post("/api/submit", async (req, res) => {
           ...(problemData.hiddenTestCases || []).map(tc => ({ ...tc, hidden: true }))
       ];
 
-      // 2. Save pending status to local Map
+      // 2. Save pending status to Redis
       const subData = {
-          id,
-          status: "Processing",
-          problemId,
-          language,
-          submittedAt: Date.now(),
-          userId: userId || "anon tester",
-          roomId
+        id,
+        status: 'Processing',
+        problemId,
+        language,
+        submittedAt: String(Date.now()),
+        userId: userId || 'anon tester',
+        roomId
       };
-      submissions.set(id, subData);
+      await saveSubmission(id, subData);
 
       // 3. Push job to Redis Queue with the test cases included
       await submissionQueue.add('execute', {
@@ -258,22 +246,21 @@ app.post("/api/submit", async (req, res) => {
 });
 
 app.get("/api/status/:id", async (req, res) => {
-    const sub = submissions.get(req.params.id);
-    if (!sub) return res.status(404).json({ error: "Not found" });
-
-    // Calculate queue position
+  try {
+    const sub = await getSubmission(req.params.id);
+    if (!sub || Object.keys(sub).length === 0) return res.status(404).json({ error: 'Not found' });
     let position = 0;
-    if (sub.status === "Processing") {
-        const state = await submissionQueue.getJobState(req.params.id);
-
-        if (state === 'waiting') {
-            // Find how many jobs are ahead of this one
-            const waitingJobs = await submissionQueue.getWaiting();
-            position = waitingJobs.findIndex(job => job.id === req.params.id) + 1;
-        }
+    if (sub.status === 'Processing') {
+      const state = await submissionQueue.getJobState(req.params.id);
+      if (state === 'waiting') {
+        const waitingJobs = await submissionQueue.getWaiting();
+        position = waitingJobs.findIndex(job => job.id === req.params.id) + 1;
+      }
     }
-
     res.json({ ...sub, queuePosition: position });
+  } catch (e) {
+    res.status(500).json({ error: 'failed to fetch status', message: e.message });
+  }
 });
 
 app.post('/upload-avatar', async (req, res) => {
@@ -309,6 +296,30 @@ app.post('/upload-avatar', async (req, res) => {
     await initPubSub();
     await initRoomService();
     await initRoomSync(io);
+    // start distributed timer worker
+    const { timerWorkerLoop } = await import('./services/timerService.js');
+    timerWorkerLoop();
+    // Wire timer fired events to socket.io broadcasts
+    const pubsub = await import('./services/pubsub.js');
+    pubsub.on('timerFired', (data) => {
+      try {
+        const { key, payload } = data;
+        // Common timer payloads include matchEnd and codingTimeUp
+        if (payload && payload.roomId) {
+          const roomId = payload.roomId;
+          if (payload.type === 'matchEnd' || payload.event === 'matchEnd') {
+            io.to(roomId).emit('matchEnd', payload);
+          } else if (payload.type === 'codingTimeUp' || payload.event === 'codingTimeUp') {
+            io.to(roomId).emit('codingTimeUp', payload);
+          } else {
+            // generic timer event
+            io.to(roomId).emit('timerEvent', payload);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to handle timerFired', e);
+      }
+    });
   } catch (e) {
     console.error('Startup init warnings:', e);
   }

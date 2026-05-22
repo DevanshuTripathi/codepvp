@@ -1,5 +1,7 @@
 import { getRedisClient, initRedis } from './redis.js';
 import { publish } from './pubsub.js';
+import { db } from '../firebaseAdmin.js';
+import admin from 'firebase-admin';
 
 // Key helpers
 const ROOM_KEY = (id) => `room:${id}`;
@@ -131,6 +133,33 @@ export async function appendMessage(roomId, message) {
   await publish('chatMessage', { roomId, message });
 }
 
+export async function setCode(roomId, code) {
+  const client = getRedisClient();
+  await client.set(CODE_KEY(roomId), code);
+  await publish('codeUpdate', { roomId, code });
+}
+
+export async function getCode(roomId) {
+  const client = getRedisClient();
+  return await client.get(CODE_KEY(roomId));
+}
+
+export async function setCursor(roomId, username, cursor) {
+  const client = getRedisClient();
+  const key = `room:${roomId}:cursors`;
+  await client.hSet(key, username, JSON.stringify(cursor));
+  await publish('cursorUpdate', { roomId, username, cursor });
+}
+
+export async function getCursors(roomId) {
+  const client = getRedisClient();
+  const key = `room:${roomId}:cursors`;
+  const raw = await client.hGetAll(key);
+  const out = {};
+  for (const [k, v] of Object.entries(raw || {})) out[k] = JSON.parse(v);
+  return out;
+}
+
 export async function listRooms() {
   const client = getRedisClient();
   const found = [];
@@ -152,4 +181,101 @@ export async function listRooms() {
     }
   } while (cursor !== 0);
   return found;
+}
+
+export async function setRoomField(roomId, field, value) {
+  const client = getRedisClient();
+  await client.hSet(ROOM_KEY(roomId), { [field]: String(value) });
+}
+
+export async function setRoomStatus(roomId, status) {
+  await setRoomField(roomId, 'status', status);
+  const room = await getRoom(roomId);
+  await publish('roomUpdate', { roomId, room });
+}
+
+export async function setRoomTimes(roomId, { startTime, endTime, duration }) {
+  const client = getRedisClient();
+  const obj = {};
+  if (startTime) obj.startTime = String(startTime);
+  if (endTime) obj.endTime = String(endTime);
+  if (duration) obj.duration = String(duration);
+  if (Object.keys(obj).length) await client.hSet(ROOM_KEY(roomId), obj);
+  const room = await getRoom(roomId);
+  await publish('roomUpdate', { roomId, room });
+}
+
+export async function setTeamFinished(roomId, teamId, timestamp) {
+  const client = getRedisClient();
+  await client.hSet(ROOM_KEY(roomId), { [`team${teamId}FinishedTime`]: String(timestamp) });
+  const room = await getRoom(roomId);
+  await publish('teamFinished', { roomId, teamId, timestamp, room });
+  return room;
+}
+
+export async function deleteRoom(roomId) {
+  const client = getRedisClient();
+  await client.del(ROOM_KEY(roomId));
+  await client.del(TEAM_KEY(roomId, 'A'));
+  await client.del(TEAM_KEY(roomId, 'B'));
+  await client.del(USERS_KEY(roomId));
+  await client.del(MESSAGES_KEY(roomId));
+  await client.del(CODE_KEY(roomId));
+  await publish('roomDelete', { roomId });
+}
+
+export async function createCompetitiveRoom(teamAPlayers, teamBPlayers, mode) {
+  const roomId = Math.floor(100000 + Math.random() * 900000).toString();
+
+  const difficulty = 'Easy';
+  const questions = mode === '1v1' ? 4 : parseInt(mode[0], 10) * 2;
+  const time = 15;
+
+  const startTime = Date.now();
+  const endTime = startTime + time * 60 * 1000;
+
+  await db.collection('rooms').doc(roomId).set({
+    difficulty,
+    size: mode,
+    questions,
+    time,
+    public: false,
+    status: 'in-progress',
+    owner: teamAPlayers[0],
+    startTime,
+    endTime,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  const snapshot = await db.collection('ProblemsWithHTC').where('difficulty', '==', difficulty).get();
+  const allProblems = snapshot.docs.map(doc => ({ id: doc.id, statusA: 0, statusB: 0, ...doc.data() }));
+  const selected = allProblems.sort(() => Math.random() - 0.5).slice(0, questions);
+
+  await db.collection('RoomSet').doc(roomId).set({
+    winningTeam: null,
+    teamA: { name: 'Team A', score: 0, players: teamAPlayers.map(pid => ({ pid, problemsSolved: 0, points: 0 })), solvedProblems: [] },
+    teamB: { name: 'Team B', score: 0, players: teamBPlayers.map(pid => ({ pid, problemsSolved: 0, points: 0 })), solvedProblems: [] },
+    allProblems: selected,
+    startedAt: startTime,
+    endTime,
+  });
+
+  // store basic room metadata in redis
+  await setRoomField(roomId, 'status', 'in-progress');
+  await setRoomField(roomId, 'owner', teamAPlayers[0]);
+  await setRoomField(roomId, 'startTime', String(startTime));
+  await setRoomField(roomId, 'endTime', String(endTime));
+  await setRoomField(roomId, 'duration', String(time * 60));
+
+  // initialize teams lists
+  const client = getRedisClient();
+  const emptyA = teamAPlayers.map(pid => JSON.stringify({ pid, ready: true }));
+  const emptyB = teamBPlayers.map(pid => JSON.stringify({ pid, ready: true }));
+  await client.del(TEAM_KEY(roomId, 'A'));
+  await client.del(TEAM_KEY(roomId, 'B'));
+  if (emptyA.length) await client.rPush(TEAM_KEY(roomId, 'A'), emptyA);
+  if (emptyB.length) await client.rPush(TEAM_KEY(roomId, 'B'), emptyB);
+
+  await publish('roomCreate', { roomId });
+  return { roomId, startTime, endTime };
 }
