@@ -1,6 +1,7 @@
 import EventEmitter from 'events';
 import { createClient } from 'redis';
-import { initRedis } from './redis.js';
+import { initRedis, getRedisClient } from './redis.js';
+import { randomUUID } from 'crypto';
 
 const CHANNEL = 'room-events';
 const emitter = new EventEmitter();
@@ -34,7 +35,21 @@ export async function initPubSub() {
     await sub.subscribe(CHANNEL, (message) => {
       try {
         const data = JSON.parse(message);
-        emitter.emit(data.type || 'message', data);
+        // Lightweight dedupe: if message includes id, ensure we only process it once
+        (async () => {
+          try {
+            const client = getRedisClient();
+            if (data.id) {
+              const key = `pubsub:seen:${data.id}`;
+              const setRes = await client.set(key, '1', { NX: true, EX: 30 });
+              if (!setRes) return; // already seen
+            }
+            emitter.emit(data.type || 'message', data);
+          } catch (e) {
+            console.error('pubsub dedupe check error', e);
+            emitter.emit(data.type || 'message', data);
+          }
+        })();
       } catch (e) {
         console.error('pubsub parse error', e);
       }
@@ -49,7 +64,7 @@ export async function initPubSub() {
 export async function publish(type, payload) {
   if (!pub) await initPubSub();
   try {
-    const msg = JSON.stringify({ type, ...payload });
+    const msg = JSON.stringify({ id: randomUUID(), type, ...payload });
     await pub.publish(CHANNEL, msg);
   } catch (e) {
     console.error('publish error', e);

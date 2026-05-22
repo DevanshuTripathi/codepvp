@@ -176,7 +176,7 @@ export async function listRooms() {
       if (parts.length === 2) {
         const id = parts[1];
         const r = await getRoom(id);
-        if (r) found.push(r);
+        if (r) found.push({ id, ...r });
       }
     }
   } while (cursor !== 0);

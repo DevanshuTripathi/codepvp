@@ -2,9 +2,9 @@ import { getRedisClient } from './redis.js';
 
 const USER_ROOM_KEY = (username) => `user:${username}:room`;
 
-export async function setUserRoom(username, roomId) {
+export async function setUserRoom(username, roomId, ttlSeconds = 600) {
   const client = getRedisClient();
-  await client.set(USER_ROOM_KEY(username), roomId);
+  await client.set(USER_ROOM_KEY(username), roomId, { EX: ttlSeconds });
 }
 
 export async function getUserRoom(username) {

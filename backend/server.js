@@ -299,6 +299,13 @@ app.post('/upload-avatar', async (req, res) => {
     // start distributed timer worker
     const { timerWorkerLoop } = await import('./services/timerService.js');
     timerWorkerLoop();
+    // start sweeper to cleanup stale/empty rooms
+    try {
+      const { startSweeper } = await import('./services/sweeper.js');
+      startSweeper();
+    } catch (e) {
+      console.warn('Failed to start sweeper', e);
+    }
     // Wire timer fired events to socket.io broadcasts
     const pubsub = await import('./services/pubsub.js');
     pubsub.on('timerFired', (data) => {
@@ -342,3 +349,41 @@ app.post('/upload-avatar', async (req, res) => {
     console.log(`🚀 Server running on port ${PORT}`),
   );
 })();
+
+// Graceful shutdown
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
+
+async function gracefulShutdown() {
+  console.log('Received shutdown signal, cleaning up...');
+  try {
+    // stop timer worker
+    try {
+      const { stopTimerWorker } = await import('./services/timerService.js');
+      stopTimerWorker();
+    } catch (e) {
+      // ignore
+    }
+
+    // disconnect redis
+    try {
+      const { getRedisClient } = await import('./services/redis.js');
+      const c = getRedisClient();
+      if (c) await c.disconnect();
+    } catch (e) {
+      // ignore
+    }
+
+    // close server
+    server.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
+
+    // fallback exit
+    setTimeout(() => process.exit(0), 5000);
+  } catch (e) {
+    console.error('Graceful shutdown error', e);
+    process.exit(1);
+  }
+}
