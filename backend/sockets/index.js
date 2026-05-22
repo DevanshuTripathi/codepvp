@@ -2,6 +2,7 @@ import { roomHandlers } from "./roomHandlers.js";
 import { gameHandlers } from "./gameHandlers.js";
 import { editorHandlers } from "./editorHandlers.js";
 import { rooms, userToRoom, frontendUserToRoom } from "../store/rooms.js";
+import { publishRoomEvent } from "../utils/roomSync.js";
 import { chatHandlers } from './chatHandlers.js';
 import { matchmakingHandlers } from "./matchmakingHandlers.js";
 import { frontendHandlers } from "./frontendHandlers.js";
@@ -43,8 +44,12 @@ export function setupSocket(io) {
 
       if (isEmpty) {
         delete rooms[roomId]; // Delete empty room
+        // Notify other instances that room was deleted
+        publishRoomEvent('roomDelete', { roomId });
       } else {
         io.to(roomId).emit("roomUpdate", room);
+        // Publish update so other instances can sync
+        publishRoomEvent('roomUpdate', { roomId, room });
       }
     });
   });

@@ -2,6 +2,8 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { setupSocket } from "./sockets/index.js";
+import { attachRedisAdapter } from "./utils/redisClient.js";
+import { initRoomSync } from "./utils/roomSync.js";
 import "dotenv/config";
 import cors from "cors";
 import { rooms } from "./store/rooms.js";
@@ -289,8 +291,18 @@ app.post('/upload-avatar', async (req, res) => {
   }
 });
 
-setupSocket(io);
+// Attach Redis adapter (if configured) and then setup sockets + start server
+(async () => {
+  try {
+    await attachRedisAdapter(io);
+    await initRoomSync(io);
+  } catch (e) {
+    console.error('Failed to attach Redis adapter / room sync:', e);
+  }
 
-server.listen(PORT, "0.0.0.0", () =>
-  console.log(`🚀 Server running on port ${PORT}`),
-);
+  setupSocket(io);
+
+  server.listen(PORT, "0.0.0.0", () =>
+    console.log(`🚀 Server running on port ${PORT}`),
+  );
+})();
