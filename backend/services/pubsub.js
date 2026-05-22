@@ -2,6 +2,10 @@ import EventEmitter from 'events';
 import { createClient } from 'redis';
 import { initRedis, getRedisClient } from './redis.js';
 import { randomUUID } from 'crypto';
+import clientProm from 'prom-client';
+
+const PUBSUB_PUBLISHED = new clientProm.Counter({ name: 'app_pubsub_published_total', help: 'PubSub messages published' });
+const PUBSUB_RECEIVED = new clientProm.Counter({ name: 'app_pubsub_received_total', help: 'PubSub messages received' });
 
 const CHANNEL = 'room-events';
 const emitter = new EventEmitter();
@@ -35,6 +39,7 @@ export async function initPubSub() {
     await sub.subscribe(CHANNEL, (message) => {
       try {
         const data = JSON.parse(message);
+        PUBSUB_RECEIVED.inc();
         // Lightweight dedupe: if message includes id, ensure we only process it once
         (async () => {
           try {
@@ -64,8 +69,10 @@ export async function initPubSub() {
 export async function publish(type, payload) {
   if (!pub) await initPubSub();
   try {
-    const msg = JSON.stringify({ id: randomUUID(), type, ...payload });
+    const replica = process.env.REPLICA_ID || null;
+    const msg = JSON.stringify({ id: randomUUID(), replica, type, ...payload });
     await pub.publish(CHANNEL, msg);
+    PUBSUB_PUBLISHED.inc();
   } catch (e) {
     console.error('publish error', e);
   }

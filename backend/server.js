@@ -16,6 +16,24 @@ import crypto from "crypto";
 import { Queue, QueueEvents } from 'bullmq';
 import { db } from "./firebaseAdmin.js";
 import { saveSubmission, getSubmission } from './services/submissionService.js';
+import pino from 'pino';
+import clientProm from 'prom-client';
+import { randomUUID } from 'crypto';
+
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+
+// Replica id for tracing across replicas
+const REPLICA_ID = process.env.REPLICA_ID || randomUUID();
+logger.info({ replica: REPLICA_ID }, 'Replica starting');
+
+// Prometheus metrics
+const collectDefaultMetrics = clientProm.collectDefaultMetrics;
+collectDefaultMetrics({ prefix: 'app_' });
+const websocketConnections = new clientProm.Gauge({ name: 'app_websocket_connections', help: 'Active websocket connections', labelNames: ['replica'] });
+const activeRoomsGauge = new clientProm.Gauge({ name: 'app_active_rooms', help: 'Active rooms count', labelNames: ['replica'] });
+const redisPingHistogram = new clientProm.Histogram({ name: 'app_redis_ping_ms', help: 'Redis ping latency ms' });
+const pubsubMessages = new clientProm.Counter({ name: 'app_pubsub_messages_total', help: 'PubSub messages seen' });
+const submissionQueueSize = new clientProm.Gauge({ name: 'app_submission_queue_size', help: 'Submission queue size', labelNames: ['replica'] });
 
 const redisConnection = {
     host: 'just-trout-105699.upstash.io',
@@ -156,14 +174,14 @@ queueEvents.on('completed', async ({ jobId, returnvalue }) => {
     if (!current) return;
     const finalStatus = status === 'Internal System Error' || status === 'Error' ? 'Error' : 'Completed';
     await saveSubmission(submissionId, { ...current, status: finalStatus, ac: ac || false, result: result || [], errorMessage: error || '' });
-    console.log(`✅ Submission ${submissionId} completed and persisted!`);
+    logger.info({ submissionId }, 'Submission completed and persisted');
   } catch (e) {
-    console.error('queue completed handler error', e);
+    logger.error({ err: e }, 'queue completed handler error');
   }
 });
 
 queueEvents.on('failed', ({ jobId, failedReason }) => {
-    console.error(`❌ Job ${jobId} failed completely:`, failedReason);
+  logger.error({ jobId, failedReason }, 'Job failed completely');
 });
 
 app.use(
@@ -181,9 +199,17 @@ app.use(fileUpload({
 
 app.use(express.json());
 
-app.get("/api/ping", (req, res) => {
-  res.send("pong");
-})
+app.get("/api/ping", (req, res) => res.send("pong"));
+
+// Metrics endpoint
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', clientProm.register.contentType);
+    res.end(await clientProm.register.metrics());
+  } catch (e) {
+    res.status(500).end(e.message);
+  }
+});
 
 app.get("/api/rooms", async (req, res) => {
   try {
@@ -282,7 +308,7 @@ app.post('/upload-avatar', async (req, res) => {
     res.json({ url: result.secure_url });
 
   } catch (err) {
-    console.error(err); // 👈 IMPORTANT
+    logger.error({ err }, 'Upload failed');
     res.status(500).json({ error: 'Upload failed' });
   }
 });
@@ -292,8 +318,22 @@ app.post('/upload-avatar', async (req, res) => {
 (async () => {
   try {
     await initRedis();
+    // verify redis connectivity early (fail-fast)
+    try {
+      const rc = getRedisClient();
+      const pong = await rc.ping();
+      if (!pong) throw new Error('Redis ping failed');
+      logger.info('Redis reachable');
+    } catch (e) {
+      logger.error({ err: e }, 'Redis unavailable during startup');
+      throw e;
+    }
+
     await attachRedisAdapter(io);
-    await initPubSub();
+    const pubsubInit = await initPubSub();
+    if (!pubsubInit || !pubsubInit.pub || !pubsubInit.sub) {
+      throw new Error('PubSub initialization failed');
+    }
     await initRoomService();
     await initRoomSync(io);
     // start distributed timer worker
@@ -333,20 +373,34 @@ app.post('/upload-avatar', async (req, res) => {
 
   setupSocket(io);
 
+  // instrument socket.io events for metrics
+  io.of('/').adapter.on('error', (err) => logger.error({ err }, 'socket.io adapter error'));
+  io.on('connection', (sock) => {
+    websocketConnections.inc({ replica: REPLICA_ID }, 1);
+    logger.info({ socketId: sock.id, replica: REPLICA_ID }, 'socket connected');
+    sock.on('disconnect', () => {
+      websocketConnections.dec({ replica: REPLICA_ID }, 1);
+      logger.info({ socketId: sock.id, replica: REPLICA_ID }, 'socket disconnected');
+    });
+  });
+
   // Health endpoints
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/redis-health', async (req, res) => {
     try {
       const c = getRedisClient();
+      const start = Date.now();
       const pong = await c.ping();
-      res.json({ redis: pong });
+      const ms = Date.now() - start;
+      redisPingHistogram.observe(ms);
+      res.json({ redis: pong, pingMs: ms });
     } catch (err) {
       res.status(500).json({ redis: 'unavailable', error: err.message });
     }
   });
 
   server.listen(PORT, "0.0.0.0", () =>
-    console.log(`🚀 Server running on port ${PORT}`),
+    logger.info({ port: PORT, replica: REPLICA_ID }, `Server running on port ${PORT}`),
   );
 })();
 
