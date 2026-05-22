@@ -1,6 +1,5 @@
 import { getRoom, setRoomStatus, setRoomTimes, setTeamFinished, deleteRoom } from '../services/roomService.js';
 import { setUserRoom, clearUserRoom } from '../services/userService.js';
-import { scheduleTimer, cancelTimer } from '../services/timerService.js';
 import { deleteSubmissionsByRoom } from '../services/submissionService.js';
 import admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -41,8 +40,7 @@ export function gameHandlers(io, socket) {
 
       await setRoomStatus(roomId, 'in-progress');
       await setRoomTimes(roomId, { startTime, endTime, duration: durationSec });
-
-      await scheduleTimer(`room:${roomId}:matchEnd`, endTime, { event: 'matchEnd', roomId });
+      // timer scheduling removed in simplified architecture
 
       io.to(roomId).emit('navigateToProblemset', { roomId, room: await getRoom(roomId) });
     })();
@@ -56,7 +54,7 @@ export function gameHandlers(io, socket) {
 
       await setRoomStatus(roomId, 'in-progress');
       await setRoomTimes(roomId, { startTime, endTime, duration: durationSec });
-      await scheduleTimer(`room:${roomId}:matchEnd`, endTime, { event: 'matchEnd', roomId });
+      // timer scheduling removed in simplified architecture
 
       io.to(p1Username).emit('tournamentMatchStarted', { roomId, team: 'A' });
       if (p2Username) io.to(p2Username).emit('tournamentMatchStarted', { roomId, team: 'B' });
@@ -71,9 +69,7 @@ export function gameHandlers(io, socket) {
 
       await setRoomStatus(contestId, 'in-progress');
       await setRoomTimes(contestId, { startTime: now, endTime: now + codingDurationMs, duration: durationMinutes * 60 });
-
-      await scheduleTimer(`room:${contestId}:codingEnd`, now + codingDurationMs, { event: 'codingTimeUp', roomId: contestId });
-      await scheduleTimer(`room:${contestId}:totalEnd`, now + codingDurationMs + GRACE_PERIOD_MS, { event: 'matchEnd', roomId: contestId });
+      // timer scheduling removed in simplified architecture
 
       console.log(`FFA Contest ${contestId} started by ${adminName}. ${durationMinutes}m coding + 5m grace.`);
     })();
@@ -97,7 +93,7 @@ export function gameHandlers(io, socket) {
       io.to(roomId).emit('teamFinishedUpdate', { teamId, finishTime });
 
       if (room.teamAFinishedTime && room.teamBFinishedTime) {
-        await cancelTimer(`room:${roomId}:matchEnd`);
+        // cancelTimer removed; timers not managed by backend in simplified architecture
         await deleteSubmissionsByRoom(roomId);
         io.to(roomId).emit('matchEnd', { reason: 'both_teams_finished' });
       }
@@ -119,7 +115,7 @@ export function gameHandlers(io, socket) {
       if (!room) return;
       const allPlayers = [...(room.teamA || []), ...(room.teamB || [])].filter(Boolean).map(p => p.pid);
       for (const p of allPlayers) await clearUserRoom(p);
-      await cancelTimer(`room:${roomId}:matchEnd`);
+      // cancelTimer removed; timers not managed by backend in simplified architecture
       await deleteSubmissionsByRoom(roomId);
       await deleteRoom(roomId);
     })();

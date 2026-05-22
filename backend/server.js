@@ -10,46 +10,25 @@ import { initRoomService, listRooms } from './services/roomService.js';
 import "dotenv/config";
 import cors from "cors";
 import { getVerdict } from "./utils/judge.js";
-import { v2 as cloudinary } from 'cloudinary';
 import fileUpload from 'express-fileupload';
 import crypto from "crypto";
 import { Queue, QueueEvents } from 'bullmq';
 import { db } from "./firebaseAdmin.js";
 import { saveSubmission, getSubmission } from './services/submissionService.js';
-import pino from 'pino';
-import clientProm from 'prom-client';
-import { randomUUID } from 'crypto';
-
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
-
-// Replica id for tracing across replicas
-const REPLICA_ID = process.env.REPLICA_ID || randomUUID();
-logger.info({ replica: REPLICA_ID }, 'Replica starting');
-
-// Prometheus metrics
-const collectDefaultMetrics = clientProm.collectDefaultMetrics;
-collectDefaultMetrics({ prefix: 'app_' });
-const websocketConnections = new clientProm.Gauge({ name: 'app_websocket_connections', help: 'Active websocket connections', labelNames: ['replica'] });
-const activeRoomsGauge = new clientProm.Gauge({ name: 'app_active_rooms', help: 'Active rooms count', labelNames: ['replica'] });
-const redisPingHistogram = new clientProm.Histogram({ name: 'app_redis_ping_ms', help: 'Redis ping latency ms' });
-const pubsubMessages = new clientProm.Counter({ name: 'app_pubsub_messages_total', help: 'PubSub messages seen' });
-const submissionQueueSize = new clientProm.Gauge({ name: 'app_submission_queue_size', help: 'Submission queue size', labelNames: ['replica'] });
+// Simple console logging used to keep the implementation minimal
+const REPLICA_ID = process.env.REPLICA_ID || null;
+console.log('Replica starting', { replica: REPLICA_ID });
 
 const redisConnection = {
-    host: 'just-trout-105699.upstash.io',
-    port: 6379,
-    password: process.env.REDIS_PASS,
-    tls: {}
+  host: process.env.REDIS_HOST || '127.0.0.1',
+  port: process.env.REDIS_PORT || 6379,
+  password: process.env.REDIS_PASS || process.env.REDIS_PASSWORD || '',
 };
 
 const submissionQueue = new Queue('submissions', { connection: redisConnection });
 const queueEvents = new QueueEvents('submissions', { connection: redisConnection });
 
-cloudinary.config({
-  cloud_name: process.env.CLOUD_NAME,
-  api_key: process.env.API_KEY,
-  api_secret: process.env.API_SECRET,
-});
+// cloudinary removed to keep backend minimal; upload endpoint removed below if unused
 
 const PORT = process.env.PORT || 5000;
 const app = express();
@@ -174,14 +153,14 @@ queueEvents.on('completed', async ({ jobId, returnvalue }) => {
     if (!current) return;
     const finalStatus = status === 'Internal System Error' || status === 'Error' ? 'Error' : 'Completed';
     await saveSubmission(submissionId, { ...current, status: finalStatus, ac: ac || false, result: result || [], errorMessage: error || '' });
-    logger.info({ submissionId }, 'Submission completed and persisted');
+    console.log('Submission completed and persisted', submissionId);
   } catch (e) {
-    logger.error({ err: e }, 'queue completed handler error');
+    console.error('queue completed handler error', e);
   }
 });
 
 queueEvents.on('failed', ({ jobId, failedReason }) => {
-  logger.error({ jobId, failedReason }, 'Job failed completely');
+  console.error('Job failed completely', { jobId, failedReason });
 });
 
 app.use(
@@ -202,14 +181,7 @@ app.use(express.json());
 app.get("/api/ping", (req, res) => res.send("pong"));
 
 // Metrics endpoint
-app.get('/metrics', async (req, res) => {
-  try {
-    res.set('Content-Type', clientProm.register.contentType);
-    res.end(await clientProm.register.metrics());
-  } catch (e) {
-    res.status(500).end(e.message);
-  }
-});
+// metrics endpoint removed to simplify architecture
 
 app.get("/api/rooms", async (req, res) => {
   try {
@@ -289,29 +261,7 @@ app.get("/api/status/:id", async (req, res) => {
   }
 });
 
-app.post('/upload-avatar', async (req, res) => {
-  try {
-    if (!req.files || !req.files.avatar) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const file = req.files.avatar;
-
-    const result = await cloudinary.uploader.upload(file.tempFilePath, {
-      folder: 'avatars',
-      transformation: [
-        { width: 300, height: 300, crop: "fill" },
-        { quality: "auto" }
-      ]
-    });
-
-    res.json({ url: result.secure_url });
-
-  } catch (err) {
-    logger.error({ err }, 'Upload failed');
-    res.status(500).json({ error: 'Upload failed' });
-  }
-});
+// Avatar upload endpoint removed to keep backend minimal
 
 // Attach Redis adapter (if configured) and then setup sockets + start server
 // Initialize Redis, Pub/Sub, adapter and room service before starting
@@ -323,9 +273,9 @@ app.post('/upload-avatar', async (req, res) => {
       const rc = getRedisClient();
       const pong = await rc.ping();
       if (!pong) throw new Error('Redis ping failed');
-      logger.info('Redis reachable');
+      console.log('Redis reachable');
     } catch (e) {
-      logger.error({ err: e }, 'Redis unavailable during startup');
+      console.error('Redis unavailable during startup', e);
       throw e;
     }
 
@@ -336,37 +286,10 @@ app.post('/upload-avatar', async (req, res) => {
     }
     await initRoomService();
     await initRoomSync(io);
-    // start distributed timer worker
-    const { timerWorkerLoop } = await import('./services/timerService.js');
-    timerWorkerLoop();
-    // start sweeper to cleanup stale/empty rooms
-    try {
-      const { startSweeper } = await import('./services/sweeper.js');
-      startSweeper();
-    } catch (e) {
-      console.warn('Failed to start sweeper', e);
-    }
+    // advanced timer workers and sweepers removed for simplicity
     // Wire timer fired events to socket.io broadcasts
     const pubsub = await import('./services/pubsub.js');
-    pubsub.on('timerFired', (data) => {
-      try {
-        const { key, payload } = data;
-        // Common timer payloads include matchEnd and codingTimeUp
-        if (payload && payload.roomId) {
-          const roomId = payload.roomId;
-          if (payload.type === 'matchEnd' || payload.event === 'matchEnd') {
-            io.to(roomId).emit('matchEnd', payload);
-          } else if (payload.type === 'codingTimeUp' || payload.event === 'codingTimeUp') {
-            io.to(roomId).emit('codingTimeUp', payload);
-          } else {
-            // generic timer event
-            io.to(roomId).emit('timerEvent', payload);
-          }
-        }
-      } catch (e) {
-        console.error('Failed to handle timerFired', e);
-      }
-    });
+    // Timer events handled via pubsub if implemented by other services; kept minimal here
   } catch (e) {
     console.error('Startup init warnings:', e);
   }
@@ -374,13 +297,11 @@ app.post('/upload-avatar', async (req, res) => {
   setupSocket(io);
 
   // instrument socket.io events for metrics
-  io.of('/').adapter.on('error', (err) => logger.error({ err }, 'socket.io adapter error'));
+  io.of('/').adapter.on('error', (err) => console.error('socket.io adapter error', err));
   io.on('connection', (sock) => {
-    websocketConnections.inc({ replica: REPLICA_ID }, 1);
-    logger.info({ socketId: sock.id, replica: REPLICA_ID }, 'socket connected');
+    console.log('socket connected', { socketId: sock.id });
     sock.on('disconnect', () => {
-      websocketConnections.dec({ replica: REPLICA_ID }, 1);
-      logger.info({ socketId: sock.id, replica: REPLICA_ID }, 'socket disconnected');
+      console.log('socket disconnected', { socketId: sock.id });
     });
   });
 
@@ -389,18 +310,15 @@ app.post('/upload-avatar', async (req, res) => {
   app.get('/redis-health', async (req, res) => {
     try {
       const c = getRedisClient();
-      const start = Date.now();
       const pong = await c.ping();
-      const ms = Date.now() - start;
-      redisPingHistogram.observe(ms);
-      res.json({ redis: pong, pingMs: ms });
+      res.json({ redis: pong });
     } catch (err) {
       res.status(500).json({ redis: 'unavailable', error: err.message });
     }
   });
 
   server.listen(PORT, "0.0.0.0", () =>
-    logger.info({ port: PORT, replica: REPLICA_ID }, `Server running on port ${PORT}`),
+    console.log(`Server running on port ${PORT}`),
   );
 })();
 
@@ -412,12 +330,7 @@ async function gracefulShutdown() {
   console.log('Received shutdown signal, cleaning up...');
   try {
     // stop timer worker
-    try {
-      const { stopTimerWorker } = await import('./services/timerService.js');
-      stopTimerWorker();
-    } catch (e) {
-      // ignore
-    }
+    // No timer workers to stop in simplified architecture
 
     // disconnect redis
     try {

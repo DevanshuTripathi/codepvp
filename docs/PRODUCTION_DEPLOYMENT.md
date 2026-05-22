@@ -1,77 +1,48 @@
 **Architecture Overview**
 
 - Stateless backend replicas (Node.js + Socket.IO) behind an NGINX load balancer.
-- Redis as single source of truth (state, timers, pub/sub, queues).
-- Prometheus scraping backend `/metrics` for observability.
-- NGINX configured for WebSocket upgrades and sticky sessions via `ip_hash`.
+- Redis as the single source of truth for shared room state and Pub/Sub for cross-instance synchronization.
+- Socket.IO Redis adapter is used to replicate socket.io rooms across replicas.
 
-**Scaling Strategy**
+**Goals**
 
-- Horizontal scaling: add more `backend` replicas.
-- Ensure replicas share Redis and Pub/Sub.
-- Timers are stored in Redis sorted set; worker pops due timers atomically.
+- Horizontal scale the backend (2-3 replicas) behind NGINX.
+- Keep the implementation minimal: only Redis-backed state, Pub/Sub, and Socket.IO adapter.
+- Use sticky sessions (NGINX `ip_hash`) so reconnecting clients return to the same backend instance when possible.
 
-**Docker Deployment**
+**Quick start (local, dev)**
 
-- Use `docker-compose.prod.yml` for production-like deployments.
-- For Docker Compose v3 on a single host, run:
+1. Create a production env file at the repo root called `.env.prod` with Redis settings (see `.env.example`).
+
+2. Start with Docker Compose:
 
 ```bash
 # build images
 docker-compose -f docker-compose.prod.yml build
-# start services (3 backend replicas via scale)
+# start services with 3 backend replicas
 docker-compose -f docker-compose.prod.yml up --scale backend=3 -d
 ```
 
-- For Docker Swarm, use `docker stack deploy` with `deploy.replicas` set.
+3. Verify Redis health endpoint:
 
-**NGINX Setup**
+```bash
+curl http://localhost:5000/redis-health
+```
 
-- The provided `nginx/prod.conf` configures `ip_hash` sticky sessions, WebSocket headers and health failover.
-- Volume-mount the file into the NGINX container: in the Compose file it's already mounted.
+**Files of interest**
 
-**Redis Setup**
+- `backend/server.js` — main server: Redis init, Pub/Sub, Socket.IO adapter attach, HTTP+socket handlers.
+- `backend/services/redis.js` — Redis client helper and connection URL logic.
+- `backend/services/pubsub.js` — thin wrapper around Redis Pub/Sub used to broadcast application events.
+- `backend/services/roomService.js` — authoritative room state stored in Redis.
+- `nginx/prod.conf` — NGINX configuration using `ip_hash` for sticky sessions and websocket proxying.
+- `docker-compose.prod.yml` — minimal compose file with `redis`, `backend`, and `nginx` services.
 
-- Run a single Redis instance for dev; use a managed Redis (Redis Cluster or managed provider) for production.
-- Ensure low-latency between backend replicas and Redis.
-- All Redis keys follow documented patterns in `docs/DISTRIBUTED_SYSTEMS.md`.
+**Notes & troubleshooting**
 
-**WebSocket Scaling & Sticky Sessions**
+- Ensure `.env.prod` points `REDIS_HOST` to the `redis` service (or use `REDIS_URL` for managed providers).
+- Remove any secrets from source; use your orchestrator or Docker secrets to inject private keys.
+- This simplified repo intentionally removes observability, metrics, distributed locks, sweepers, and other operational tooling to keep the core architecture minimal and focused.
 
-- Use `ip_hash` for simple sticky sessions. For cloud deployments, prefer load balancer cookie-based sticky sessions or use socket.io adapter with an external message broker.
-- `@socket.io/redis-adapter` is used to replicate socket.io rooms across replicas.
-
-**Autoscaling Strategy**
-
-- Autoscale based on CPU, memory, queue length and connection counts. Use metrics exported to Prometheus and configure Horizontal Pod Autoscaler (Kubernetes) or cloud autoscaling groups.
-
-**Environment Variables**
-
-- `NODE_ENV=production`
-- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASS`
-- `REPLICA_ID` (optional)
-- `LOG_LEVEL` (info/debug)
-- All production secrets (Firebase, Cloudinary, OAuth) must be injected via environment or secret manager.
-
-**Troubleshooting Guide**
-
-- Check `/health` and `/redis-health` on each replica.
-- Inspect logs (Pino JSON) and metrics `/metrics`.
-- Use `scripts/validate_startup.js` to run basic health checks against local deployment.
-
-**Validation & Tests**
-
-- Use `scripts/integration_test.js` to run a basic multi-client sync test.
-- For load testing, use `k6` or `wrk` with websocket scripts to simulate clients and reconnect storms.
-
-**Runbook: common issues**
-
-- Duplicate timers: ensure timer worker is running once per cluster or atomic removal succeeds (implemented via MULTI zRem check).
-- Duplicate matchmaking: ensure matchmaking uses distributed locks (`lockService.withLock`).
-- Stale users: `user:<username>:room` entries have TTL; sweeper removes empty rooms.
-
-**Further recommendations**
-
-- Add Prometheus alerts for high Redis latency, high queue sizes, and many reconnects.
-- Use structured log aggregation (ELK/Datadog) and correlate by `replica` and request/socket IDs.
+If you want, I can also replace this file with a small `README.md` at the repo root. 
 

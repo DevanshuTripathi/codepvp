@@ -1,7 +1,5 @@
 import { getRedisClient } from './redis.js';
 import { createCompetitiveRoom } from './roomService.js';
-import { scheduleTimer } from './timerService.js';
-import { withLock } from './lockService.js';
 
 const PARTY_KEY = (code) => `party:${code}`; // hash
 const USER_PARTY = (username) => `user:${username}:party`;
@@ -56,40 +54,28 @@ export async function leaveQueue(mode, username) {
 
 export async function tryMatch(io, mode) {
   const client = getRedisClient();
-  const lockKey = LOCK_KEY(mode);
 
-  // Run match attempt under a distributed lock
   try {
-    await withLock(lockKey, async () => {
-      const len = await client.lLen(QUEUE_KEY(mode));
-      if (len < 2) return;
+    const len = await client.lLen(QUEUE_KEY(mode));
+    if (len < 2) return;
 
-      // Pop two entries
-      const aRaw = await client.lPop(QUEUE_KEY(mode));
-      const bRaw = await client.lPop(QUEUE_KEY(mode));
-      if (!aRaw || !bRaw) return;
-      const a = JSON.parse(aRaw);
-      const b = JSON.parse(bRaw);
+    // Pop two entries
+    const aRaw = await client.lPop(QUEUE_KEY(mode));
+    const bRaw = await client.lPop(QUEUE_KEY(mode));
+    if (!aRaw || !bRaw) return;
+    const a = JSON.parse(aRaw);
+    const b = JSON.parse(bRaw);
 
-      const teamA = a.party || [a.leader];
-      const teamB = b.party || [b.leader];
+    const teamA = a.party || [a.leader];
+    const teamB = b.party || [b.leader];
 
-      // Create competitive room (stores metadata in Firestore & Redis)
-      const { roomId, endTime } = await createCompetitiveRoom(teamA, teamB, mode);
+    // Create competitive room (stores metadata in Firestore & Redis)
+    const { roomId, endTime } = await createCompetitiveRoom(teamA, teamB, mode);
 
-      const time = 15; // minutes
-      const durationMs = time * 60 * 1000;
-
-      // schedule match end
-      await scheduleTimer(`room:${roomId}:matchEnd`, Date.now() + durationMs, { event: 'matchEnd', roomId });
-
-      // Notify players
-      for (const username of teamA) io.to(username).emit('matchFound', { roomId, team: 'A', endTime });
-      for (const username of teamB) io.to(username).emit('matchFound', { roomId, team: 'B', endTime });
-    }, { ttlMs: 5000, retries: 2, retryDelayMs: 100 });
+    // Notify players (no scheduled timer here)
+    for (const username of teamA) io.to(username).emit('matchFound', { roomId, team: 'A', endTime });
+    for (const username of teamB) io.to(username).emit('matchFound', { roomId, team: 'B', endTime });
   } catch (e) {
-    // lock acquisition failed or error inside critical section
-    if (e && e.message && e.message.includes('Failed to acquire lock')) return;
     console.error('tryMatch error', e);
   }
 }

@@ -1,5 +1,4 @@
 import { getRedisClient } from './redis.js';
-import { scheduleTimer } from './timerService.js';
 
 const QUEUE_KEY = 'frontend:queue';
 const ROOM_KEY = (id) => `frontend:room:${id}`;
@@ -46,8 +45,7 @@ export async function tryCreateFrontendMatch() {
     await client.hSet(ROOM_FILES(roomId), p, JSON.stringify({ '/App.js': 'export default function App() {\n  return <h1>Hello PixelPvP</h1>;\n}\n' }));
   }
 
-  // schedule end timer and voting cleanup
-  await scheduleTimer(`frontend:${roomId}:end`, end, { event: 'frontendMatchEnd', roomId });
+  // timer scheduling removed in simplified architecture
 
   return { roomId, players, endTime: end };
 }
