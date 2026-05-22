@@ -1,102 +1,50 @@
-import { rooms, userToRoom } from "../store/rooms.js";
+import { addUserToSlot, removeUserFromRoom, createRoom, getRoom, toggleReady } from "../services/roomService.js";
+import { setUserRoom, clearUserRoom, getUserRoom } from "../services/userService.js";
 
 export function roomHandlers(io, socket) {
-    socket.on("joinRoom", ({ roomId, username, SLOT_COUNT }) => {
+    socket.on("joinRoom", async ({ roomId, username, SLOT_COUNT = 3 }) => {
         socket.username = username;
         socket.roomId = roomId;
 
-        const existing = userToRoom[username];
-
-        // If user present in a different room leave from that room
-        if (existing && existing.roomId !== roomId) {
-            const oldRoom = rooms[existing.roomId];
-            if (oldRoom) {
-                oldRoom.teamA = oldRoom.teamA.map(p => (p?.pid === username ? null : p));
-                oldRoom.teamB = oldRoom.teamB.map(p => (p?.pid === username ? null : p));
-                io.to(existing.roomId).emit("roomUpdate", oldRoom);
-            }
-            socket.leave(existing.roomId);
+        // Ensure room exists
+        const existing = await getRoom(roomId);
+        if (!existing) {
+            await createRoom(roomId, username, SLOT_COUNT);
         }
 
-        if (!rooms[roomId]) { // Mock Data 
-            rooms[roomId] = { 
-                owner: username, 
-                teamA: Array(SLOT_COUNT).fill(null), 
-                teamB: Array(SLOT_COUNT).fill(null), 
-                public: true ,
-                status: 'waiting'
-            };
-        }
+        // Persist mapping user -> room
+        await setUserRoom(username, roomId);
 
-        userToRoom[username] = { roomId };
+        // Join socket.io room
         socket.join(roomId);
+        socket.join(username); // personal room
 
-        console.log(socket.username, "Joined room:", socket.roomId)
-
-        io.to(roomId).emit("roomUpdate", rooms[roomId]);
-    });
-
-    socket.on("togglePrivacy", ({isPublic, roomId}) => {
-        if (!rooms[roomId]) return;
-        
-        rooms[roomId].public = !isPublic;
-
-        io.to(roomId).emit("roomUpdate", rooms[roomId]);
-
-    });
-
-    socket.on("joinSlot", ({ roomId, team, slotIndex, username, SLOT_COUNT }) => {
-        if (!rooms[roomId]) {
-            rooms[roomId] = { 
-                owner: username, 
-                teamA: Array(SLOT_COUNT).fill(null), 
-                teamB: Array(SLOT_COUNT).fill(null), 
-                public: true ,
-                status: 'waiting'
-            };
-        }
-        const room = rooms[roomId];
-
-        room.teamA = room.teamA.map(p => (p?.pid === username ? null : p));
-        room.teamB = room.teamB.map(p => (p?.pid === username ? null : p));
-
-        const targetTeam = team === "A" ? room.teamA : room.teamB;
-        if (!targetTeam[slotIndex]) targetTeam[slotIndex] = { pid: username, ready: false };
-
-        socket.join(roomId);
-        userToRoom[username] = { roomId, username };
-
+        const room = await getRoom(roomId);
         io.to(roomId).emit("roomUpdate", room);
     });
 
-    socket.on("toggleReady", ({ roomId, team, slotIndex, username }) => {
-        const room = rooms[roomId];
-        if (!room) return;
-        const slot = room[`team${team}`][slotIndex];
-        if (slot?.pid === username) {
-            slot.ready = !slot.ready;
-            io.to(roomId).emit("roomUpdate", room);
-        }
+    socket.on("joinSlot", async ({ roomId, team, slotIndex, username, SLOT_COUNT = 3 }) => {
+        // create room if missing
+        const existing = await getRoom(roomId);
+        if (!existing) await createRoom(roomId, username, SLOT_COUNT);
+
+        await addUserToSlot(roomId, team, slotIndex, username);
+        await setUserRoom(username, roomId);
+        socket.join(roomId);
+
+        const room = await getRoom(roomId);
+        io.to(roomId).emit("roomUpdate", room);
     });
 
-    socket.on("disconnectRoom", ({ username, roomId }) => {
-        const room = rooms[roomId];
-        if(!room) return;
+    socket.on("toggleReady", async ({ roomId, team, slotIndex, username }) => {
+        const room = await toggleReady(roomId, team, slotIndex, username);
+        if (room) io.to(roomId).emit("roomUpdate", room);
+    });
 
-        room.teamA = room.teamA.map(p => (p && p.pid === username ? null : p));
-        room.teamB = room.teamB.map(p => (p && p.pid === username ? null : p));
-
-        delete userToRoom[username];
-
-        const isEmpty = [...room.teamA, ...room.teamB].every(p => p === null);
-
-        if (isEmpty) {
-            delete rooms[roomId];
-            console.log(`🗑️ Room ${roomId} deleted (empty after ${username} left)`);
-        } else {
-            io.to(roomId).emit("roomUpdate", room);
-        }
-
+    socket.on("disconnectRoom", async ({ username, roomId }) => {
+        await clearUserRoom(username);
+        const room = await removeUserFromRoom(roomId, username);
         socket.leave(roomId);
+        if (room) io.to(roomId).emit("roomUpdate", room);
     });
 }

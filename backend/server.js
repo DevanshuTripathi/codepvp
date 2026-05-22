@@ -4,9 +4,11 @@ import { Server } from "socket.io";
 import { setupSocket } from "./sockets/index.js";
 import { attachRedisAdapter } from "./utils/redisClient.js";
 import { initRoomSync } from "./utils/roomSync.js";
+import { initRedis, getRedisClient } from './services/redis.js';
+import { initPubSub } from './services/pubsub.js';
+import { initRoomService, listRooms } from './services/roomService.js';
 import "dotenv/config";
 import cors from "cors";
-import { rooms } from "./store/rooms.js";
 import { getVerdict } from "./utils/judge.js";
 import { v2 as cloudinary } from 'cloudinary';
 import fileUpload from 'express-fileupload';
@@ -195,7 +197,14 @@ app.get("/api/ping", (req, res) => {
   res.send("pong");
 })
 
-app.get("/api/rooms", (req, res) => res.json(rooms));
+app.get("/api/rooms", async (req, res) => {
+  try {
+    const all = await listRooms();
+    res.json(all);
+  } catch (e) {
+    res.status(500).json({ error: 'failed to list rooms', msg: e.message });
+  }
+});
 
 app.post("/api/submit", async (req, res) => {
 
@@ -292,15 +301,31 @@ app.post('/upload-avatar', async (req, res) => {
 });
 
 // Attach Redis adapter (if configured) and then setup sockets + start server
+// Initialize Redis, Pub/Sub, adapter and room service before starting
 (async () => {
   try {
+    await initRedis();
     await attachRedisAdapter(io);
+    await initPubSub();
+    await initRoomService();
     await initRoomSync(io);
   } catch (e) {
-    console.error('Failed to attach Redis adapter / room sync:', e);
+    console.error('Startup init warnings:', e);
   }
 
   setupSocket(io);
+
+  // Health endpoints
+  app.get('/health', (req, res) => res.json({ status: 'ok' }));
+  app.get('/redis-health', async (req, res) => {
+    try {
+      const c = getRedisClient();
+      const pong = await c.ping();
+      res.json({ redis: pong });
+    } catch (err) {
+      res.status(500).json({ redis: 'unavailable', error: err.message });
+    }
+  });
 
   server.listen(PORT, "0.0.0.0", () =>
     console.log(`🚀 Server running on port ${PORT}`),
